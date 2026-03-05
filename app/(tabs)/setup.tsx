@@ -6,9 +6,11 @@ import { Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from '
 export default function SetupNewGameScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
-  const cameraRef = useRef<CameraView | null>(null);
+  const cameraRef = useRef<CameraView>(null);
   const [webStream, setWebStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  const [cardsScanned, setCardsScanned] = useState(0);
 
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -50,73 +52,87 @@ export default function SetupNewGameScreen() {
   const rows = Array.from({ length: 5 });
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.cameraContainer, { width: cameraSize, height: cameraSize }]}> 
-        {/* Corner guides overlay */}
-        <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cornerOverlay]}>
-          {/* Top Left */}
-          <View style={[styles.corner, styles.cornerTL]} />
-          {/* Top Right */}
-          <View style={[styles.corner, styles.cornerTR]} />
-          {/* Bottom Left */}
-          <View style={[styles.corner, styles.cornerBL]} />
-          {/* Bottom Right */}
-          <View style={[styles.corner, styles.cornerBR]} />
+
+      <View style={styles.container}>
+        <View style={{ width: '100%', alignItems: 'center', marginBottom: 16 }}>
+          <Text style={{ fontSize: 24, fontWeight: 'bold', letterSpacing: 1 }}>
+            Scan Your Cards
+          </Text>
         </View>
-        {hasPermission === null ? (
-          <Text style={styles.statusText}>Requesting camera permission...</Text>
-        ) : hasPermission === false ? (
-          <Text style={styles.statusText}>Camera permission denied. Please enable camera access in your device settings.</Text>
-        ) : Platform.OS === 'web' ? (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            style={{ width: '100%', height: '100%', borderRadius: 12, background: '#222' }}
-          />
-        ) : (
-          <>
-            {!cameraReady && (
-              <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', zIndex: 2, backgroundColor: 'rgba(0,0,0,0.2)' }]}> 
-                <Text style={styles.statusText}>Starting camera...</Text>
-              </View>
-            )}
-            <CameraView
-              ref={cameraRef}
-              // style={{ flex: 1, borderRadius: 12 }}
-              // facing={'back'}
-              // onCameraReady={() => setCameraReady(true)}
-              // ratio="1:1"
+        <View style={[styles.cameraContainer, { width: cameraSize, height: cameraSize }]}> 
+          {/* Corner guides overlay */}
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cornerOverlay]}>
+            {/* Top Left */}
+            <View style={[styles.corner, styles.cornerTL]} />
+            {/* Top Right */}
+            <View style={[styles.corner, styles.cornerTR]} />
+            {/* Bottom Left */}
+            <View style={[styles.corner, styles.cornerBL]} />
+            {/* Bottom Right */}
+            <View style={[styles.corner, styles.cornerBR]} />
+          </View>
+          {hasPermission === null ? (
+            <Text style={styles.statusText}>Requesting camera permission...</Text>
+          ) : hasPermission === false ? (
+            <Text style={styles.statusText}>Camera permission denied. Please enable camera access in your device settings.</Text>
+          ) : Platform.OS === 'web' ? (
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              style={{ width: '100%', height: '100%', borderRadius: 12, background: '#222' }}
             />
-          </>
-        )}
-      </View>
-      <View style={{ width: cameraSize }}>
-        <View style={styles.tableRow}>
-          {columns.map((col, idx) => (
-            <View key={col} style={styles.tableCellHeader}>
-              <Text style={styles.headerText}>{col}</Text>
+          ) : (
+            <>
+              {!cameraReady && (
+                <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', zIndex: 2, backgroundColor: 'rgba(0,0,0,0.2)' }]}> 
+                  <Text style={styles.statusText}>Starting camera...</Text>
+                </View>
+              )}
+              
+            </>
+          )}
+          <CameraView
+            ref={cameraRef}
+            style={styles.camera}
+            facing={'back'}
+            onCameraReady={() => setCameraReady(true)}
+            ratio="1:1"
+          />
+        </View>
+        
+        <View style={{ width: cameraSize }}>
+          <View style={styles.tableRow}>
+            {columns.map((col, idx) => (
+              <View key={col} style={styles.tableCellHeader}>
+                <Text style={styles.headerText}>{col}</Text>
+              </View>
+            ))}
+          </View>
+          {rows.map((_, rowIdx) => (
+            <View key={rowIdx} style={styles.tableRow}>
+              {columns.map((_, colIdx) => (
+                <View key={colIdx} style={styles.tableCell} />
+              ))}
             </View>
           ))}
         </View>
-        {rows.map((_, rowIdx) => (
-          <View key={rowIdx} style={styles.tableRow}>
-            {columns.map((_, colIdx) => (
-              <View key={colIdx} style={styles.tableCell} />
-            ))}
-          </View>
-        ))}
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.button}>
+            <Text style={styles.buttonText}
+              onPress={() => setCardsScanned(cardsScanned+1)}>Add Another Card</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.button}>
+            <Text style={styles.buttonText}>Start BINGO</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={{ width: '100%', alignItems: 'center', margin: 16 }}>
+          <Text style={{ fontSize: 24, fontWeight: 'bold', letterSpacing: 1 }}>
+            Cards Scanned: {cardsScanned}
+          </Text>
+        </View>
       </View>
-      <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.button}>
-          <Text style={styles.buttonText}>Add Another Card</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.button}>
-          <Text style={styles.buttonText}>Start BINGO</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
   );
 }
 
@@ -130,12 +146,12 @@ const styles = StyleSheet.create({
   },
   cameraContainer: {
     borderRadius: 10,
-    overflow: 'hidden',
     backgroundColor: '#222',
     marginBottom: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  camera: StyleSheet.absoluteFillObject,
   tableRow: {
     flexDirection: 'row',
   },
