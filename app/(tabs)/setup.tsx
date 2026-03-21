@@ -1,23 +1,19 @@
+import textRecognition, { TextRecognitionScript } from '@react-native-ml-kit/text-recognition';
 import { Camera, CameraView } from 'expo-camera';
+import * as ImageManipulator from 'expo-image-manipulator';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Easing, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-// Dynamically import tesseract.js for web and mobile
-// let Tesseract: any = null;
-// if (Platform.OS === 'web') {
-//   // @ts-ignore
-//   Tesseract = require('tesseract.js');
-// } else {
-//   // For mobile, use tesseract.js via a lightweight wrapper (expo-tesseract or similar)
-//   // If not available, fallback to webview or display a message
-//   try {
-//     // @ts-ignore
-//     Tesseract = require('tesseract.js');
-//   } catch {
-//     Tesseract = null;
-//   }
-// }
-const { createWorker, PSM } = require('tesseract.js');
+// Only use tesseract.js for web OCR. For mobile, use react-native-ml-kit/text-recognition.
+const isWeb = Platform.OS === 'web';
+let createWorker: any = null;
+let PSM: any = null;
+if (isWeb) {
+  const tesseract = require('tesseract.js');
+  createWorker = tesseract.createWorker;
+  PSM = tesseract.PSM;
+}
+
 
 export default function SetupNewGameScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
@@ -30,7 +26,19 @@ export default function SetupNewGameScreen() {
   const [ocrText, setOcrText] = useState<string>('No OCR results yet.');
   const [ocrLoading, setOcrLoading] = useState(false);
 
+  // Table state for OCR results (5x5 grid)
+  const [tableData, setTableData] = useState<string[][]>(Array.from({ length: 5 }, () => Array(5).fill('')));
+
   const [cardsScanned, setCardsScanned] = useState(0);
+
+  // Function to insert text into the table by row and column
+  const insertTextToTable = (row: number, col: number, text: string) => {
+    setTableData(prev => {
+      const newData = prev.map(arr => [...arr]);
+      newData[row][col] = text;
+      return newData;
+    });
+  };
 
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -138,51 +146,82 @@ export default function SetupNewGameScreen() {
     // eslint-disable-next-line
   }, [hasPermission, ocrLoading]);
 
-  // OCR for mobile: capture a frame and run Tesseract
+  // OCR for mobile: capture a frame and run ML Kit text recognition
   useEffect(() => {
     let interval: number;
-    if (Platform.OS !== 'web' && hasPermission && cameraReady && createWorker && cameraRef.current) {
+    if (!isWeb && hasPermission && cameraReady && cameraRef.current) {
       interval = setInterval(async () => {
         if (!ocrLoading && cameraRef.current) {
           try {
             setOcrLoading(true);
-            console.log('Starting OCR scan...');
             // Take a picture
             // @ts-ignore
             const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.5, skipProcessing: true, animateShutter: false });
-            console.log('Photo captured for OCR.');
-            if (photo && photo.base64) {
-              console.log('Running Tesseract OCR...');
-              const image = `data:image/jpeg;base64,${photo.base64}`;
-              console.log('Image prepared for OCR.');
-              const worker = await createWorker('eng', 1, {
-                logger: (m: any) => {
-                  // Optional: handle progress updates
-                  console.log(m);
-                },
-                workerPath: "./node_modules/tesseract.js/src/worker-script/node/index.js"
+            if (photo && photo.uri) {
+              // Get image dimensions
+              const { width: imgWidth, height: imgHeight } = photo;
+              const gridRows = 5;
+              const gridCols = 5;
+              const cellWidth = imgWidth / gridCols;
+              const cellHeight = imgHeight / gridRows;
+
+              // Parallelize tile processing
+              const tilePromises: Promise<{ row: number; col: number; text: string }>[][] = [];
+              for (let row = 0; row < gridRows; row++) {
+                const rowPromises: Promise<{ row: number; col: number; text: string }>[] = [];
+                for (let col = 0; col < gridCols; col++) {
+                  const crop = {
+                    originX: Math.round(col * cellWidth),
+                    originY: Math.round(row * cellHeight),
+                    width: Math.round(cellWidth),
+                    height: Math.round(cellHeight),
+                  };
+                  rowPromises.push(
+                    (async () => {
+                      try {
+                        const tile = await ImageManipulator.manipulateAsync(
+                          photo.uri,
+                          [{ crop }],
+                          { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
+                        );
+                        const tileResult = await textRecognition.recognize(tile.uri, TextRecognitionScript.LATIN);
+                        const tileText = tileResult.blocks.map((block: any) => block.text).join(' ').trim();
+                        insertTextToTable(row, col, tileText);
+                        return { row, col, text: tileText };
+                      } catch {
+                        insertTextToTable(row, col, '');
+                        return { row, col, text: '' };
+                      }
+                    })()
+                  );
+                }
+                tilePromises.push(rowPromises);
+              }
+              // Wait for all tiles to finish
+              const results: string[][] = [];
+              await Promise.all(
+                tilePromises.map(rowPromises =>
+                  Promise.all(rowPromises).then(rowResults => rowResults.map(r => r.text))
+                )
+              ).then(allRows => {
+                allRows.forEach((rowResults, rowIdx) => {
+                  results[rowIdx] = rowResults;
+                });
               });
-              await worker.setParameters({
-                tessedit_pageseg_mode: PSM.SINGLE_BLOCK, // Single block mode
-              });
-              const data = await worker.recognize(image, 'eng', { logger: (m: any) => {
-                // Optional: handle progress updates
-                console.log(m);
-              }});
-              console.log('OCR text extracted:', data.text);
-              setOcrText(data.text.trim() || 'No text detected');
-              await worker.terminate();
+              setOcrText(results.map(row => row.join(' | ')).join('\n'));
             }
-            console.log('OCR scan completed.');
-          } finally {
+          // } catch (err) {
+          //   setOcrText('OCR error');
+          } 
+          finally {
             setOcrLoading(false);
           }
         }
       }, 4000); // Run OCR every 4 seconds on mobile
-    } else {console.log('OCR not started: ', { hasPermission, cameraReady, createWorker, cameraRef: cameraRef.current });}
+    }
     return () => {
       if (interval) clearInterval(interval);
-    };  
+    };
     // eslint-disable-next-line
   }, [hasPermission, cameraReady, ocrLoading]);
 
@@ -336,6 +375,7 @@ export default function SetupNewGameScreen() {
             onCameraReady={() => setCameraReady(true)}
             ratio="1:1"
             animateShutter={false}
+            zoom={0.2}
           />
         </View>
         
@@ -347,10 +387,13 @@ export default function SetupNewGameScreen() {
               </View>
             ))}
           </View>
+          {/* Render 5 rows, each with 5 columns, showing OCR results */}
           {rows.map((_, rowIdx) => (
             <View key={rowIdx} style={styles.tableRow}>
               {columns.map((_, colIdx) => (
-                <View key={colIdx} style={styles.tableCell} />
+                <View key={colIdx} style={styles.tableCell}>
+                  <Text style={{ fontSize: 13, textAlign: 'center' }}>{tableData[rowIdx][colIdx]}</Text>
+                </View>
               ))}
             </View>
           ))}
