@@ -1,6 +1,7 @@
 import textRecognition, { TextRecognitionScript } from '@react-native-ml-kit/text-recognition';
 import { Camera, CameraView } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Easing, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -16,6 +17,7 @@ if (isWeb) {
 
 
 export default function SetupNewGameScreen() {
+  const router = useRouter();
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const cameraRef = useRef<CameraView>(null);
@@ -29,7 +31,8 @@ export default function SetupNewGameScreen() {
   // Table state for OCR results (5x5 grid)
   const [tableData, setTableData] = useState<string[][]>(Array.from({ length: 5 }, () => Array(5).fill('')));
 
-  const [cardsScanned, setCardsScanned] = useState(0);
+  // Array of bingo cards (each is a 5x5 array)
+  const [savedCards, setSavedCards] = useState<string[][][]>([]);
 
   // Function to insert text into the table by row and column
   const insertTextToTable = (row: number, col: number, text: string) => {
@@ -38,6 +41,12 @@ export default function SetupNewGameScreen() {
       newData[row][col] = text;
       return newData;
     });
+  };
+
+  // Save current table as a card
+  const saveCurrentCard = () => {
+    setSavedCards(prev => [...prev, tableData.map(row => [...row])]);
+    setTableData(Array.from({ length: 5 }, () => Array(5).fill('')));
   };
 
   useEffect(() => {
@@ -67,163 +76,120 @@ export default function SetupNewGameScreen() {
   }, []);
 
   // // OCR for web: capture a frame and run Tesseract on each grid block
-  useEffect(() => {
-    let interval: number;
-    if (Platform.OS === 'web' && hasPermission && videoRef.current && createWorker) {
-      interval = setInterval(async () => {
-        if (videoRef.current && !ocrLoading) {
-          try {
-            setOcrLoading(true);
-            // Create a canvas to draw the video frame
-            const canvas = document.createElement('canvas');
-            canvas.width = videoRef.current.videoWidth;
-            canvas.height = videoRef.current.videoHeight;
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-
-              // Section into 5x5 grid
-              const gridRows = 5;
-              const gridCols = 5;
-              const cellWidth = canvas.width / gridCols;
-              const cellHeight = canvas.height / gridRows;
-
-              // Prepare worker
-              const worker = await createWorker('eng', 1, {
-                logger: (m: any) => console.log(m),
-              });
-              await worker.setParameters({
-                tessedit_pageseg_mode: PSM.SINGLE_CHAR, // Single character mode
-              });
-
-              const results: string[][] = [];
-              for (let row = 0; row < gridRows; row++) {
-                const rowResults: string[] = [];
-                for (let col = 0; col < gridCols; col++) {
-                  // Crop each cell to a new canvas
-                  const cellCanvas = document.createElement('canvas');
-                  cellCanvas.width = cellWidth;
-                  cellCanvas.height = cellHeight;
-                  const cellCtx = cellCanvas.getContext('2d');
-                  if (cellCtx) {
-                    cellCtx.drawImage(
-                      canvas,
-                      col * cellWidth, row * cellHeight, cellWidth, cellHeight,
-                      0, 0, cellWidth, cellHeight
-                    );
-                    const cellDataUrl = cellCanvas.toDataURL('image/png');
-                    try {
-                      const ret = await worker.recognize(cellDataUrl, { tessedit_char_whitelist: '0123456789' });
-                      rowResults.push(ret.data.text.trim() || '');
-                    } catch {
-                      rowResults.push('');
-                    }
-                  } else {
-                    rowResults.push('');
-                  }
-                }
-                results.push(rowResults);
-              }
-
-              await worker.terminate();
-
-              // Output as a grid
-              setOcrText(
-                results.map(row => row.join(' | ')).join('\n')
-              );
-            }
-          } catch (e) {
-            setOcrText('OCR error');
-          } finally {
-            setOcrLoading(false);
-          }
-        }
-      }, 3000); // Run OCR every 3 seconds
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-    // eslint-disable-next-line
-  }, [hasPermission, ocrLoading]);
+  // Remove interval-based OCR. Use Scan button instead.
 
   // OCR for mobile: capture a frame and run ML Kit text recognition
-  useEffect(() => {
-    let interval: number;
-    if (!isWeb && hasPermission && cameraReady && cameraRef.current) {
-      interval = setInterval(async () => {
-        if (!ocrLoading && cameraRef.current) {
-          try {
-            setOcrLoading(true);
-            // Take a picture
-            // @ts-ignore
-            const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.5, skipProcessing: true, animateShutter: false });
-            if (photo && photo.uri) {
-              // Get image dimensions
-              const { width: imgWidth, height: imgHeight } = photo;
-              const gridRows = 5;
-              const gridCols = 5;
-              const cellWidth = imgWidth / gridCols;
-              const cellHeight = imgHeight / gridRows;
-
-              // Parallelize tile processing
-              const tilePromises: Promise<{ row: number; col: number; text: string }>[][] = [];
-              for (let row = 0; row < gridRows; row++) {
-                const rowPromises: Promise<{ row: number; col: number; text: string }>[] = [];
-                for (let col = 0; col < gridCols; col++) {
-                  const crop = {
-                    originX: Math.round(col * cellWidth),
-                    originY: Math.round(row * cellHeight),
-                    width: Math.round(cellWidth),
-                    height: Math.round(cellHeight),
-                  };
-                  rowPromises.push(
-                    (async () => {
-                      try {
-                        const tile = await ImageManipulator.manipulateAsync(
-                          photo.uri,
-                          [{ crop }],
-                          { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
-                        );
-                        const tileResult = await textRecognition.recognize(tile.uri, TextRecognitionScript.LATIN);
-                        const tileText = tileResult.blocks.map((block: any) => block.text).join(' ').trim();
-                        insertTextToTable(row, col, tileText);
-                        return { row, col, text: tileText };
-                      } catch {
-                        insertTextToTable(row, col, '');
-                        return { row, col, text: '' };
-                      }
-                    })()
-                  );
+  // Remove interval-based OCR. Use Scan button instead.
+  // Scan handler for both web and mobile
+  const handleScan = async () => {
+    if (ocrLoading) return;
+    setOcrLoading(true);
+    try {
+      if (Platform.OS === 'web' && hasPermission && videoRef.current && createWorker) {
+        // Web OCR logic
+        const canvas = document.createElement('canvas');
+        canvas.width = videoRef.current.videoWidth;
+        canvas.height = videoRef.current.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+          const gridRows = 5;
+          const gridCols = 5;
+          const cellWidth = canvas.width / gridCols;
+          const cellHeight = canvas.height / gridRows;
+          const worker = await createWorker('eng', 1, { logger: (m: any) => console.log(m) });
+          await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_CHAR });
+          const results: string[][] = [];
+          for (let row = 0; row < gridRows; row++) {
+            const rowResults: string[] = [];
+            for (let col = 0; col < gridCols; col++) {
+              const cellCanvas = document.createElement('canvas');
+              cellCanvas.width = cellWidth;
+              cellCanvas.height = cellHeight;
+              const cellCtx = cellCanvas.getContext('2d');
+              if (cellCtx) {
+                cellCtx.drawImage(
+                  canvas,
+                  col * cellWidth, row * cellHeight, cellWidth, cellHeight,
+                  0, 0, cellWidth, cellHeight
+                );
+                const cellDataUrl = cellCanvas.toDataURL('image/png');
+                try {
+                  const ret = await worker.recognize(cellDataUrl, { tessedit_char_whitelist: '0123456789' });
+                  rowResults.push(ret.data.text.trim() || '');
+                } catch {
+                  rowResults.push('');
                 }
-                tilePromises.push(rowPromises);
+              } else {
+                rowResults.push('');
               }
-              // Wait for all tiles to finish
-              const results: string[][] = [];
-              await Promise.all(
-                tilePromises.map(rowPromises =>
-                  Promise.all(rowPromises).then(rowResults => rowResults.map(r => r.text))
-                )
-              ).then(allRows => {
-                allRows.forEach((rowResults, rowIdx) => {
-                  results[rowIdx] = rowResults;
-                });
-              });
-              setOcrText(results.map(row => row.join(' | ')).join('\n'));
             }
-          // } catch (err) {
-          //   setOcrText('OCR error');
-          } 
-          finally {
-            setOcrLoading(false);
+            results.push(rowResults);
           }
+          await worker.terminate();
+          setTableData(results);
+          setOcrText(results.map(row => row.join(' | ')).join('\n'));
         }
-      }, 4000); // Run OCR every 4 seconds on mobile
+      } else if (!isWeb && hasPermission && cameraReady && cameraRef.current) {
+        // Mobile OCR logic
+        // @ts-ignore
+        const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.5, skipProcessing: true, animateShutter: false });
+        if (photo && photo.uri) {
+          // Get image dimensions
+          const { width: imgWidth, height: imgHeight } = photo;
+          const gridRows = 5;
+          const gridCols = 5;
+          const cellWidth = imgWidth / gridCols;
+          const cellHeight = imgHeight / gridRows;
+          const tilePromises: Promise<{ row: number; col: number; text: string }>[][] = [];
+          for (let row = 0; row < gridRows; row++) {
+            const rowPromises: Promise<{ row: number; col: number; text: string }>[] = [];
+            for (let col = 0; col < gridCols; col++) {
+              const crop = {
+                originX: Math.round(col * cellWidth),
+                originY: Math.round(row * cellHeight),
+                width: Math.round(cellWidth),
+                height: Math.round(cellHeight),
+              };
+              rowPromises.push(
+                (async () => {
+                  try {
+                    const tile = await ImageManipulator.manipulateAsync(
+                      photo.uri,
+                      [{ crop }],
+                      { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
+                    );
+                    const tileResult = await textRecognition.recognize(tile.uri, TextRecognitionScript.LATIN);
+                    const tileText = tileResult.blocks.map((block: any) => block.text).join(' ').trim();
+                    return { row, col, text: tileText };
+                  } catch {
+                    return { row, col, text: '' };
+                  }
+                })()
+              );
+            }
+            tilePromises.push(rowPromises);
+          }
+          const results: string[][] = [];
+          await Promise.all(
+            tilePromises.map(rowPromises =>
+              Promise.all(rowPromises).then(rowResults => rowResults.map(r => r.text))
+            )
+          ).then(allRows => {
+            allRows.forEach((rowResults, rowIdx) => {
+              results[rowIdx] = rowResults;
+            });
+          });
+          setTableData(results);
+          setOcrText(results.map(row => row.join(' | ')).join('\n'));
+        }
+      }
+    } catch (e) {
+      setOcrText('OCR error');
+    } finally {
+      setOcrLoading(false);
     }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-    // eslint-disable-next-line
-  }, [hasPermission, cameraReady, ocrLoading]);
+  };
 
   // Responsive sizing
   const screenHeight = Dimensions.get('window').height;
@@ -378,6 +344,12 @@ export default function SetupNewGameScreen() {
             zoom={0.2}
           />
         </View>
+
+        <View style={[styles.buttonRow, { margin: 12, maxWidth: 200 }]}>
+          <TouchableOpacity style={styles.button} onPress={handleScan} disabled={ocrLoading}>
+            <Text style={styles.buttonText}>{ocrLoading ? 'Scanning...' : 'Scan'}</Text>
+          </TouchableOpacity>
+        </View>
         
         <View style={{ width: cameraSize }}>
           <View style={styles.tableRow}>
@@ -399,17 +371,16 @@ export default function SetupNewGameScreen() {
           ))}
         </View>
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.button}>
-            <Text style={styles.buttonText}
-              onPress={() => setCardsScanned(cardsScanned+1)}>Add Another Card</Text>
+          <TouchableOpacity style={styles.button} onPress={saveCurrentCard}>
+            <Text style={styles.buttonText}>Save Card</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.button}>
+          <TouchableOpacity style={styles.button} onPress={() => router.push({ pathname: '/(tabs)/BingoBoards', params: { cardsJSON: JSON.stringify(savedCards) } })} disabled={savedCards.length === 0}>
             <Text style={styles.buttonText}>Start BINGO</Text>
           </TouchableOpacity>
         </View>
         <View style={{ width: '100%', alignItems: 'center', margin: 16 }}>
-          <Text style={{ fontSize: 24, fontWeight: 'bold', letterSpacing: 1 }}>
-            Cards Scanned: {cardsScanned}
+          <Text style={{ fontSize: 18, fontWeight: 'bold', letterSpacing: 1 }}>
+            Cards Saved: {savedCards.length}
           </Text>
         </View>
         <Text style={styles.statusText}>OCR Result: {ocrLoading ? 'Processing...' : ocrText}</Text>
