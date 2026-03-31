@@ -2,9 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, BackHandler, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, BackHandler, Dimensions, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-export default function BingoBoards() { 
+export default function BingoBoards() {
     const navigation = useNavigation();
     const router = useRouter();
     // Confirm navigation before going back
@@ -253,7 +253,7 @@ export default function BingoBoards() {
                         width: position.width,
                         },
                     ]}
-                    >
+                >
                     {Object.keys(winMethods).map((option ) => (
                         <Pressable
                         key={option}
@@ -284,13 +284,19 @@ export default function BingoBoards() {
                 </TouchableOpacity>
             </View>
             <Text style={{ fontSize: 16, marginBottom: 8 }}>Current: {called}</Text>
-      <ScrollView>
+            <View style={{ flex: 1, width: '100%' }}>
                 {savedCards.length === 0 ? (
                     <Text style={{ textAlign: 'center', color: '#888', marginTop: 32 }}>No boards saved.</Text>
                 ) : (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-            {savedCards.map((card: string[][], idx: number) => (
-              <View key={idx} style={bingoStyles.cardContainer}>
+                    <FlatList
+                        data={savedCards}
+                        keyExtractor={(_, idx) => idx.toString()}
+                        numColumns={2}
+                        contentContainerStyle={{ paddingBottom: 16, alignItems: 'center' }}
+                        showsVerticalScrollIndicator={true}
+                        renderItem={({ item: card, index: idx }) => (
+                            <View style={[bingoStyles.cardContainer, { backgroundColor: cardColors[idx] || '#f9f9f9' }] }>
+                                <TouchableOpacity style={{ width: '100%', height: '100%', flex: 1 }} onPress={() => handleZoomCard(idx)} activeOpacity={0.8}>
                                     <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Card {idx + 1}</Text>
                                     {card.map((row, rowIdx) => (
                                         <View key={rowIdx} style={{ flexDirection: 'row' }}>
@@ -301,15 +307,12 @@ export default function BingoBoards() {
                                             ))}
                                         </View>
                                     ))}
-                <TouchableOpacity key={idx} style={bingoStyles.cardContainer} onPress={() => handleZoomCard(idx)} activeOpacity={0.8}/>
-
-              </View>
-              
-            ))}
-            
+                                </TouchableOpacity>
                             </View>
                         )}
-      </ScrollView>
+                    />
+                )}
+            </View>
             <TouchableOpacity style={bingoStyles.clearButton} onPress={handleClear}>
                 <Text style={{ color: '#fff', fontWeight: 'bold' }}>Clear Boards (New Game)</Text>
             </TouchableOpacity>
