@@ -8,14 +8,14 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
   const router = useRouter();
 
-  // Helper for back arrow
-  const BackArrow = () => (
+  // Helper for left-facing back arrow
+  const BackArrow = (options: any) => (
     <Pressable
-      onPress={() => router.replace('/(tabs)')}
+      onPress={() => {console.log(options['home']); options['home'] ? router.navigate('/(tabs)') : router.navigate('/(tabs)/setup');}}
       style={{ marginLeft: 16 }}
       accessibilityLabel="Back to Home"
     >
-      <IconSymbol name="chevron.left.forwardslash.chevron.right" size={28} color={colorScheme === 'dark' ? '#fff' : '#000'} />
+      <IconSymbol name="chevron.left" size={28} color={colorScheme === 'dark' ? '#fff' : '#000'} />
     </Pressable>
   );
 
@@ -31,7 +31,7 @@ export default function TabLayout() {
         options={{
           title: 'Setup New Game',
           headerShown: true,
-          headerLeft: () => <BackArrow />,
+          headerLeft: () => <BackArrow home={true} />,
         }}
       />
       <Tabs.Screen
@@ -39,7 +39,15 @@ export default function TabLayout() {
         options={{
           title: 'Previous Games',
           headerShown: true,
-          headerLeft: () => <BackArrow />,
+          headerLeft: () => <BackArrow home={true} />,
+        }}
+      />
+      <Tabs.Screen
+        name="BingoBoards"
+        options={{
+          title: 'Bingo Boards',
+          headerShown: true,
+          headerLeft: () => <BackArrow home={false} />,
         }}
       />
     </Tabs>

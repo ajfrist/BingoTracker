@@ -1,10 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, BackHandler, Dimensions, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, BackHandler, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-export default function BingoBoards() {
+export default function BingoBoards() { 
     const navigation = useNavigation();
     const router = useRouter();
     // Confirm navigation before going back
@@ -218,19 +218,60 @@ export default function BingoBoards() {
         setCardsData(updatedCardsData);
     }, [called]);
 
+    // Setup for custom dropdown menu (Picker alternative)
+    const [open, setOpen] = useState(false);
+    const [selected, setSelected] = useState("Select an option");
+    const [position, setPosition] = useState({ x: 0, y: 0, width: 0 });
 
+    const triggerRef = useRef<View>(null);
 
+    const openDropdown = () => {
+        triggerRef.current?.measureInWindow((x, y, width, height) => {
+            setPosition({ x, y: y + height, width });
+            setOpen(true);
+        });
+    };
 
     return (
         <View style={{ flex: 1, padding: 16, backgroundColor: '#fff' }}>
-            {/* Back button top left */}
-            <TouchableOpacity
-                style={{ position: 'absolute', top: 16, left: 16, zIndex: 10, padding: 8 }}
-                onPress={confirmBack}
-            >
-                <Text style={{ fontSize: 18, color: '#1976d2', fontWeight: 'bold' }}>{'< Back'}</Text>
-            </TouchableOpacity>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, marginTop: 8, paddingLeft: 40 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center'}}>
+                <Text style={{ fontSize: 20, fontWeight: 'bold' }}>Win Method: </Text>
+                <View>
+                {/* Trigger */}
+                <Pressable ref={triggerRef} style={bingoStyles.dropdownTrigger} onPress={openDropdown}>
+                <Text>{selected}</Text>
+                </Pressable>
+                {/* Dropdown */}
+                <Modal transparent visible={open} animationType="fade">
+                <Pressable style={bingoStyles.dropdownOverlay} onPress={() => setOpen(false)}>
+                    <View
+                    style={[
+                        bingoStyles.dropdownMenu,
+                        {
+                        top: position.y,
+                        left: position.x,
+                        width: position.width,
+                        },
+                    ]}
+                    >
+                    {Object.keys(winMethods).map((option ) => (
+                        <Pressable
+                        key={option}
+                        style={bingoStyles.dropdownItem}
+                        onPress={() => {
+                            setSelected(option);
+                            setOpen(false);
+                        }}
+                        >
+                        <Text>{option}</Text>
+                        </Pressable>
+                    ))}
+                    </View>
+                </Pressable>
+                </Modal>
+                </View>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 16, marginTop: 8, paddingLeft: 40 }}>
                 <Text style={{ fontSize: 18, fontWeight: 'bold' }}>Called: </Text>
                 <TextInput
                     style={{ borderWidth: 1, borderColor: '#bbb', borderRadius: 6, padding: 6, minWidth: 80, marginRight: 8 }}
@@ -397,5 +438,28 @@ const bingoStyles = StyleSheet.create({
         borderRadius: 8,
         alignItems: 'center',
         marginTop: 16,
+    },
+    dropdownTrigger: {
+        padding: 12,
+        borderWidth: 1,
+        borderRadius: 6,
+        backgroundColor: "#fff",
+        flexDirection: "row", alignItems: "flex-start", 
+        width: "100%"
+    },
+    dropdownOverlay: {
+        flex: 1,
+    },
+    dropdownMenu: {
+        position: "absolute",
+        backgroundColor: "#fff",
+        borderRadius: 6,
+        elevation: 8, // Android shadow
+        shadowColor: "#000", // iOS shadow
+        shadowOpacity: 0.15,
+        shadowRadius: 6,
+    },
+    dropdownItem: {
+        padding: 12,
     },
 });
