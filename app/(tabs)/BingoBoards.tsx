@@ -11,7 +11,7 @@ export default function BingoBoards() {
     const confirmBack = useCallback(() => {
         Alert.alert(
             'Go Back?',
-            'Are you sure you want to go back? All progress will be lost.',
+            'Are you sure you want to go back? Board marker progress will be lost.',
             [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Yes', style: 'destructive', onPress: () => router.navigate('/(tabs)/setup') },
@@ -30,16 +30,16 @@ export default function BingoBoards() {
     const [allCalled, setAllCalled] = useState<string[]>([]);
     const [input, setInput] = useState('');
     const [trackedCards, setTrackedCards] = useState<number[]>([]); // Indexes of cards being tracked
-    const [cardsData, setCardsData] = useState<bigint[]>([]);
+    const [cardsData, setCardsData] = useState<number[]>([]);
     const [savedCards, setSavedCards] = useState<string[][][]>([]);
     const [winProgress, setWinProgress] = useState<number[]>([]); // Progress for each card and each win pattern
     const [cardColors, setCardColors] = useState<string[]>([]); // Card background colors
     // Initialize empty cards data on mount or when savedCards changes
     useEffect(() => {
         // Initialize empty cards data for bitmasking
-        const initialCards: bigint[] = [];
+        const initialCards: number[] = [];
         for (let i = 0; i < savedCards.length; i++) {
-            initialCards.push(1000000000000n);
+            initialCards.push(0b1000000000000);
         }
         setCardsData(initialCards);
     }, [savedCards.length]);
@@ -48,19 +48,27 @@ export default function BingoBoards() {
     const { cardsJSON } = useLocalSearchParams<{ cardsJSON: string; }>();
     useEffect(() => {
         setSavedCards(JSON.parse(cardsJSON) || []);
+        setTrackedCards(savedCards.map((_, idx) => idx));
     }, [cardsJSON]);
 
     const [zoomedCardIdx, setZoomedCardIdx] = useState<number>(-1);
 
     const handleSubmit = () => {
-        setCalled(input);
-        setAllCalled(prev => [...prev, input]);
+        // Normalize input by stripping non-digit characters
+        let normalizedInput = input.replace(/\D/g, '');
+        if (normalizedInput === '') {
+            Alert.alert('Invalid Input', 'Please enter a valid number.');
+            return;
+        }
+
+        setCalled(normalizedInput);
+        setAllCalled(prev => [...prev, normalizedInput]);
         setInput('');
     };
 
     const handleClear = () => {
         Alert.alert(
-            'Clear All Boards?',
+            'Clear All Board Markers?',
             'Are you sure you want to clear all saved boards and start a new game?',
             [
                 { text: 'Cancel', style: 'cancel' },
@@ -90,7 +98,11 @@ export default function BingoBoards() {
                         } catch (e) {
                             console.error('Failed to save previous game:', e);
                         }
-                        setCardsData([]);
+                        const initialCards: number[] = [];
+                        for (let i = 0; i < savedCards.length; i++) {
+                            initialCards.push(0b1000000000000);
+                        }
+                        setCardsData(initialCards);
                         setAllCalled([]);
                         setCalled('');
                         setWinProgress([]);
@@ -102,15 +114,22 @@ export default function BingoBoards() {
 
     const handleZoomCard = (idx: number) => {
         setZoomedCardIdx(idx);
+        console.log('Zooming card', idx);
     };
 
     const handleBackFromZoom = () => {
+        console.log('Closing zoom view', zoomedCardIdx);
         setZoomedCardIdx(-1);
     };
 
     const handleStopTracking = () => {
+        if (trackedCards.includes(zoomedCardIdx)) {
+            setTrackedCards(trackedCards.filter(idx => idx !== zoomedCardIdx));
+        } else {
+            setTrackedCards([...trackedCards, zoomedCardIdx]);
+        }
+
         setZoomedCardIdx(-1);
-        setTrackedCards(trackedCards.filter(idx => idx !== zoomedCardIdx));
 
     };
 
@@ -118,7 +137,7 @@ export default function BingoBoards() {
         // Iterate over cardsData to update tracked color cards
         let newColors: string[] = [];
         for (let i = 0; i < cardsData.length; i++) {
-            if (!(i in trackedCards)) {
+            if (!(trackedCards.includes(i))) {
                 newColors.push('#212121ff');
             } else {
                 newColors.push('#f9f9f9');
@@ -127,27 +146,27 @@ export default function BingoBoards() {
         setCardColors(newColors);
     }, [trackedCards]);
 
-    const winMethods: Record<string, bigint[]> = {
+    const winMethods: Record<string, number[]> = {
         "Traditional": [
-            1000010000100001000010000n,
-            100001000010000100001000n,
-            10000100001000010000100n,
-            1000010000100001000010n,
-            100001000010000100001n,
-            1111100000000000000000000n,
-            11111000000000000000n,
-            111110000000000n,
-            1111100000n,
-            11111n,
-            1000001000001000001000001n,
-            100010001000100010000n],
-        "Four Corners (small)": [1000100000000000000010001n],
-        "Four Corners (big)": [1101111011000001101111011n],
-        "Blackout": [1111111111111111111111111n],
-        "T": [1111100100001000010000100n],
-        "X": [1000101010001000101010001n],
-        "Plus": [10000100111110010000100n],
-        "Postage Stamp": [1100011000000000000000n]
+            0b1000010000100001000010000,
+            0b100001000010000100001000,
+            0b10000100001000010000100,
+            0b1000010000100001000010,
+            0b100001000010000100001,
+            0b1111100000000000000000000,
+            0b11111000000000000000,
+            0b111110000000000,
+            0b1111100000,
+            0b11111,
+            0b1000001000001000001000001,
+            0b100010001000100010000],
+        "Four Corners (small)": [0b1000100000000000000010001],
+        "Four Corners (big)": [0b1101111011000001101111011],
+        "Blackout": [0b1111111111111111111111111],
+        "T": [0b1111100100001000010000100],
+        "X": [0b1000101010001000101010001],
+        "Plus": [0b10000100111110010000100],
+        "Postage Stamp": [0b1100011000000000000000]
     };
     const [winMethod, setWinMethod] = useState<string>("Traditional");
 
@@ -157,6 +176,13 @@ export default function BingoBoards() {
         const newProgresses: number[] = [];
         const newColors: string[] = [];
         for (let cardIdx = 0; cardIdx < cardsData.length; cardIdx++) {
+            // Skip untracked cards (eliminated cards)
+            if (!(trackedCards.includes(cardIdx))) {
+                newProgresses.push(24);
+                newColors.push('#212121ff');
+                continue;
+            }
+
             // Get current card state as bitmask
             const cardState = cardsData[cardIdx];
             const winPatterns = winMethods[winMethod];
@@ -164,14 +190,23 @@ export default function BingoBoards() {
             let progress = 24;
             for (let winPattern of winPatterns) {
                 const matchedBits = cardState & winPattern;
+                
+                // Count number of bits set in winPattern
+                let neededCount = 0;
+                for (let bitPos = 0; bitPos < 25; bitPos++) {
+                    if ((winPattern & (1 << bitPos)) !== 0) {
+                        neededCount = neededCount + 1;
+                    }
+                }
+
                 // Count number of bits set in matchedBits
                 let count = 0;
-                for (let bitPos = 0n; bitPos < 25n; bitPos++) {
-                    if ((matchedBits & (1n << bitPos)) !== 0n) {
+                for (let bitPos = 24; bitPos >= 0; bitPos--) {
+                    if ((matchedBits & (1 << bitPos)) !== 0) {
                         count++;
                     }
                 }
-                progress = Math.min(progress, count);
+                progress = Math.min(progress, neededCount - count);
             }
             newProgresses.push(progress);
 
@@ -195,7 +230,7 @@ export default function BingoBoards() {
         }
         setWinProgress(newProgresses);
         setCardColors(newColors);
-    }, [winMethod, cardsData]);
+    }, [winMethod, cardsData, trackedCards]);
 
     // Update the state of each card when a number is called
     useEffect(() => {
@@ -207,8 +242,8 @@ export default function BingoBoards() {
                 for (let col = 0; col < 5; col++) {
                     const cellValue = card[row][col];
                     if (cellValue === called) {
-                        const bitPosition = BigInt(24 - (row * 5 + col));
-                        updatedCardData = updatedCardData | (1n << bitPosition);
+                        const bitPosition = 24 - (row * 5 + col);
+                        updatedCardData = updatedCardData | (1 << bitPosition);
                         break;
                     }
                 }
@@ -220,7 +255,7 @@ export default function BingoBoards() {
 
     // Setup for custom dropdown menu (Picker alternative)
     const [open, setOpen] = useState(false);
-    const [selected, setSelected] = useState("Select an option");
+    const [selected, setSelected] = useState("Traditional");
     const [position, setPosition] = useState({ x: 0, y: 0, width: 0 });
 
     const triggerRef = useRef<View>(null);
@@ -261,6 +296,7 @@ export default function BingoBoards() {
                         onPress={() => {
                             setSelected(option);
                             setOpen(false);
+                            setWinMethod(option);
                         }}
                         >
                         <Text>{option}</Text>
@@ -271,19 +307,23 @@ export default function BingoBoards() {
                 </Modal>
                 </View>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 16, marginTop: 8, paddingLeft: 40 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10, marginTop: 8, paddingLeft: 40 }}>
                 <Text style={{ fontSize: 18, fontWeight: 'bold' }}>Called: </Text>
                 <TextInput
                     style={{ borderWidth: 1, borderColor: '#bbb', borderRadius: 6, padding: 6, minWidth: 80, marginRight: 8 }}
                     value={input}
                     onChangeText={setInput}
-                    placeholder="Type call..."
+                    placeholder=""
+                    keyboardType='numeric'
+                    onSubmitEditing={handleSubmit}
+                    maxLength={2}
+                    returnKeyType="done"
                 />
                 <TouchableOpacity style={{ backgroundColor: '#1976d2', padding: 8, borderRadius: 6 }} onPress={handleSubmit}>
                     <Text style={{ color: '#fff', fontWeight: 'bold' }}>Submit</Text>
                 </TouchableOpacity>
             </View>
-            <Text style={{ fontSize: 16, marginBottom: 8 }}>Current: {called}</Text>
+            <Text style={{ fontSize: 16, marginBottom: 5 }}>Called: {allCalled.toReversed().slice(0, Math.min(10, allCalled.length)).join(', ')}</Text>
             <View style={{ flex: 1, width: '100%' }}>
                 {savedCards.length === 0 ? (
                     <Text style={{ textAlign: 'center', color: '#888', marginTop: 32 }}>No boards saved.</Text>
@@ -297,14 +337,19 @@ export default function BingoBoards() {
                         renderItem={({ item: card, index: idx }) => (
                             <View style={[bingoStyles.cardContainer, { backgroundColor: cardColors[idx] || '#f9f9f9' }] }>
                                 <TouchableOpacity style={{ width: '100%', height: '100%', flex: 1 }} onPress={() => handleZoomCard(idx)} activeOpacity={0.8}>
-                                    <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Card {idx + 1}</Text>
+                                    <Text style={{ fontWeight: 'bold', marginBottom: 1 }}>Card {idx + 1}   -   {winProgress[idx]} left</Text>
                                     {card.map((row, rowIdx) => (
                                         <View key={rowIdx} style={{ flexDirection: 'row' }}>
-                                            {row.map((cell, colIdx) => (
-                                                <View key={colIdx} style={bingoStyles.cell}>
-                                                    <Text style={{ fontSize: 13, textAlign: 'center' }}>{cell}</Text>
-                                                </View>
-                                            ))}
+                                            {row.map((cell, colIdx) => {
+                                                // Calculate bit position for this cell
+                                                const bitPosition = 24 - (rowIdx * 5 + colIdx);
+                                                const isFilled = (cardsData[idx] & (1 << bitPosition)) !== 0;
+                                                return (
+                                                    <View key={colIdx} style={[bingoStyles.cell,  isFilled && { backgroundColor: '#222', borderColor: '#111' }]}>
+                                                        <Text style={{ fontSize: 13, textAlign: 'center', color: isFilled ? '#fff' : '#222' }}>{cell}</Text>
+                                                    </View>
+                                                );
+                                            })}
                                         </View>
                                     ))}
                                 </TouchableOpacity>
@@ -314,7 +359,7 @@ export default function BingoBoards() {
                 )}
             </View>
             <TouchableOpacity style={bingoStyles.clearButton} onPress={handleClear}>
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Clear Boards (New Game)</Text>
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>New Game (Clear Board Markers)</Text>
             </TouchableOpacity>
             {/* Card Zoom Modal */}
             <Modal
@@ -332,8 +377,8 @@ export default function BingoBoards() {
                                     <View key={rowIdx} style={bingoStyles.zoomedRow}>
                                         {row.map((cell, colIdx) => {
                                             // Calculate bit position for this cell
-                                            const bitPosition = BigInt(24 - (rowIdx * 5 + colIdx));
-                                            const isFilled = (cardsData[zoomedCardIdx] & (1n << bitPosition)) !== 0n;
+                                            const bitPosition = 24 - (rowIdx * 5 + colIdx);
+                                            const isFilled = (cardsData[zoomedCardIdx] & (1 << bitPosition)) !== 0;
                                             return (
                                                 <View
                                                     key={colIdx}
@@ -350,7 +395,7 @@ export default function BingoBoards() {
                                         <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Back</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity style={[bingoStyles.modalButton, { backgroundColor: '#d32f2f' }]} onPress={handleStopTracking}>
-                                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Stop Tracking</Text>
+                                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>{trackedCards.includes(zoomedCardIdx) ? 'Stop Tracking' : 'Start Tracking'}</Text>
                                     </TouchableOpacity>
                                 </View>
                             </>
@@ -367,27 +412,29 @@ const bingoStyles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#bbb',
         borderRadius: 8,
-        padding: 8,
-        margin: 8,
+        padding: 5,
+        margin: 3,
         width: Dimensions.get('window').width / 2 - 32,
+        height: Dimensions.get('window').width / 2 - 70,
         backgroundColor: '#f9f9f9',
         minHeight: 120,
-        maxHeight: 180,
+        maxHeight: 280,
+        maxWidth: "50%",
         justifyContent: 'center',
         alignItems: 'center',
     },
     cell: {
         flex: 1,
-        minWidth: 24,
-        minHeight: 24,
+        minWidth: 18,
+        minHeight: 18,
         borderWidth: 1,
         borderColor: '#ddd',
         backgroundColor: '#fff',
         alignItems: 'center',
         justifyContent: 'center',
-        margin: 1,
-        width: "18%",
-        height: 30,
+        margin: 0,
+        width: "10%",
+        height: "10%",
     },
     zoomedCardContainer: {
         backgroundColor: '#fff',
@@ -414,6 +461,7 @@ const bingoStyles = StyleSheet.create({
         flex: 1,
         minWidth: 40,
         minHeight: 40,
+        maxHeight: 120,
         borderWidth: 1,
         borderColor: '#1976d2',
         backgroundColor: '#e3f2fd',
@@ -442,15 +490,14 @@ const bingoStyles = StyleSheet.create({
         alignItems: 'center',
         marginTop: 16,
     },
-<<<<<<< HEAD
-=======
     dropdownTrigger: {
         padding: 12,
         borderWidth: 1,
         borderRadius: 6,
         backgroundColor: "#fff",
         flexDirection: "row", alignItems: "flex-start", 
-        width: "100%"
+        width: "100%",
+        minWidth: 150,
     },
     dropdownOverlay: {
         flex: 1,
@@ -467,5 +514,4 @@ const bingoStyles = StyleSheet.create({
     dropdownItem: {
         padding: 12,
     },
->>>>>>> debug_bingo
 });

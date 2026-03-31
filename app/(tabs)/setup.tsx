@@ -3,7 +3,7 @@ import { Camera, CameraView } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Easing, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Dimensions, Easing, Platform, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
 
 // Only use tesseract.js for web OCR. For mobile, use react-native-ml-kit/text-recognition.
 const isWeb = Platform.OS === 'web';
@@ -374,7 +374,7 @@ export default function SetupNewGameScreen() {
           <TouchableOpacity style={styles.button} onPress={saveCurrentCard}>
             <Text style={styles.buttonText}>Save Card</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.button} onPress={() => router.push({ pathname: '/(tabs)/BingoBoards', params: { cardsJSON: JSON.stringify(savedCards) } })} disabled={savedCards.length === 0}>
+          <TouchableOpacity style={styles.button} onPress={() => savedCards.length===0 ? ToastAndroid.show('No cards saved!', ToastAndroid.SHORT) : router.push({ pathname: '/(tabs)/BingoBoards', params: { cardsJSON: JSON.stringify(savedCards) } })} >
             <Text style={styles.buttonText}>Start BINGO</Text>
           </TouchableOpacity>
         </View>
@@ -382,6 +382,11 @@ export default function SetupNewGameScreen() {
           <Text style={{ fontSize: 18, fontWeight: 'bold', letterSpacing: 1 }}>
             Cards Saved: {savedCards.length}
           </Text>
+        </View>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={[styles.button, { backgroundColor: '#d32f2f' }]} onPress={saveCurrentCard}>
+            <Text style={styles.buttonText}>Remove All Cards</Text>
+          </TouchableOpacity>
         </View>
         <Text style={styles.statusText}>OCR Result: {ocrLoading ? 'Processing...' : ocrText}</Text>
       </View>
