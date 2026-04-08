@@ -3,7 +3,7 @@ import { ThemedView } from '@/components/themed-view';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 
 type GameData = {
@@ -11,7 +11,8 @@ type GameData = {
   cards: string[][][];
   allCalled: string[];
   winMethod: string;
-  cardsData: string[];
+  cardsData: number[];
+  winProgress: number[];
 };
 
 type DateGames = {
@@ -80,20 +81,71 @@ export default function PreviousGamesScreen() {
     setSelectedGameIdx(idx => Math.min(gamesLen - 1, idx + 1));
   };
 
+  const handleDeleteGame = () => {
+    Alert.alert(
+      'Delete Game?',
+      'Are you sure you want to delete this game from the records?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes', style: 'destructive', onPress: async () => {
+            if (selectedDateIdx === null) return;
+            const dateObj = dateGames[selectedDateIdx];
+            const updatedGames = [...dateObj.games];
+            updatedGames.splice(selectedGameIdx, 1);
+
+            try {
+              await AsyncStorage.setItem(`bingo_games_${dateObj.date}`, JSON.stringify(updatedGames));
+              const updatedDateGames = [...dateGames];
+              updatedDateGames[selectedDateIdx] = { ...dateObj, games: updatedGames };
+              setDateGames(updatedDateGames);
+              if (updatedGames.length === 0) {
+                setSelectedDateIdx(null);
+                setModalVisible(false);
+              } else {
+                setSelectedGameIdx(Math.min(selectedGameIdx, updatedGames.length - 1));
+              }
+            } catch (e) {
+              console.error('Failed to delete game:', e);
+            }
+          }
+        },
+      ]
+    );
+  };
+      
+
   // Render a bingo card (5x5 grid)
-  const renderCard = (card: string[][], cardIdx: number) => (
-    <View key={cardIdx} style={styles.cardContainer}>
+  const renderCard = (card: string[][], cardIdx: number, winProgress?: number[]) => {
+    let progress = winProgress ? winProgress[cardIdx] : 24;
+    const cardBackgroundColor = progress === 0 ? '#f00cd1ff' // Magenta for BINGO
+                              : progress === 1 ? '#e53935' // Red
+                              : progress === 2 ? '#fb8c00' // Orange
+                              : progress === 3 ? '#fdd835' // Yellow
+                              : progress === 4 ? '#aed581' // Light green
+                              : progress === 5 ? '#81c784' // Green
+                              : '#f9f9f9'; 
+    return (
+    <View key={cardIdx} style={[styles.cardContainer, { backgroundColor: cardBackgroundColor }]}>
       {card.map((row, rowIdx) => (
         <View key={rowIdx} style={{ flexDirection: 'row' }}>
-          {row.map((cell, colIdx) => (
-            <View key={colIdx} style={styles.cell}>
-              <Text style={{ fontSize: 13 }}>{cell}</Text>
-            </View>
-          ))}
+          {row.map((cell, colIdx) => {
+            // Fill cell block color based on cardsData bitmask
+            const dateObj = dateGames[selectedDateIdx!];
+            const game = dateObj.games[selectedGameIdx];
+            const bitPosition = 24 - (rowIdx * 5 + colIdx);
+            const isFilled = (game.cardsData[cardIdx] & (1 << bitPosition)) !== 0;
+            return (
+              <View key={colIdx} style={[styles.cell, isFilled && { backgroundColor: '#222', borderColor: '#111' }]}>
+                <Text style={{ fontSize: 13, color: isFilled ? '#fff' : '#222' }}>{cell}</Text>
+              </View>
+            );
+          })}
         </View>
       ))}
     </View>
-  );
+    );
+  };
 
   // Render the modal for a selected game
   const renderGameModal = () => {
@@ -110,12 +162,15 @@ export default function PreviousGamesScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <TouchableOpacity onPress={handleCloseModal} style={{ padding: 8 }}>
+              <TouchableOpacity onPress={handleCloseModal} style={{ padding: 8, marginRight: 20}}>
                 <Text style={{ fontWeight: 'bold', color: '#1976d2' }}>Close</Text>
               </TouchableOpacity>
-              <Text style={{ fontWeight: 'bold', fontSize: 16 }}>{dateObj.date} - Game {selectedGameIdx + 1} of {dateObj.games.length}</Text>
-              <View style={{ width: 48 }} />
+              <Text style={{ fontWeight: 'bold', fontSize: 16 }}>{dateObj.date} - {new Date(dateObj.games[selectedGameIdx].timestamp).toTimeString().split(' ')[0]}</Text>
+              <TouchableOpacity onPress={handleDeleteGame} style={{ padding: 8, marginLeft: 20, borderRadius: 6, backgroundColor: '#d32f2f' }}>
+                <Text style={{ fontWeight: 'bold', color: '#ffffff' }}>Delete</Text>
+              </TouchableOpacity>
             </View>
+            <Text style={{ fontWeight: 'bold', fontSize: 16 }}>Game {selectedGameIdx + 1} of {dateObj.games.length}</Text>
             <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
               <TouchableOpacity onPress={handlePrevGame} disabled={selectedGameIdx === 0} style={[styles.navButton, selectedGameIdx === 0 && { opacity: 0.5 }]}> 
                 <Text style={{ fontSize: 18 }}>{'<'}</Text>
@@ -129,7 +184,7 @@ export default function PreviousGamesScreen() {
               <Text style={{ fontWeight: 'bold', fontSize: 15, marginBottom: 6 }}>Win Method: {game.winMethod}</Text>
               <Text style={{ fontSize: 14, marginBottom: 6 }}>Numbers Called: {game.allCalled?.join(', ')}</Text>
               <View style={styles.cardsWrap}>
-                {game.cards.map((card, idx) => renderCard(card, idx))}
+                {game.cards.map((card, idx) => renderCard(card, idx, game.winProgress))}
               </View>
             </ScrollView>
           </View>

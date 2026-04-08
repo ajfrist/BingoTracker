@@ -83,7 +83,8 @@ export default function BingoBoards() {
                                 cards: savedCards,
                                 allCalled,
                                 winMethod,
-                                cardsData: cardsData.map(b => b.toString()),
+                                cardsData,
+                                winProgress
                             };
                             // Fetch existing games for this date
                             const storageKey = `bingo_games_${dateKey}`;
@@ -318,12 +319,13 @@ export default function BingoBoards() {
                     onSubmitEditing={handleSubmit}
                     maxLength={2}
                     returnKeyType="done"
+                    submitBehavior='submit'
                 />
                 <TouchableOpacity style={{ backgroundColor: '#1976d2', padding: 8, borderRadius: 6 }} onPress={handleSubmit}>
                     <Text style={{ color: '#fff', fontWeight: 'bold' }}>Submit</Text>
                 </TouchableOpacity>
             </View>
-            <Text style={{ fontSize: 16, marginBottom: 5 }}>Called: {allCalled.toReversed().slice(0, Math.min(10, allCalled.length)).join(', ')}</Text>
+            <Text style={{ fontSize: 16, marginBottom: 5 }}>Called: {allCalled.toReversed().slice(0, Math.min(10, allCalled.length)).join(', ')}{allCalled.length>10 ? ', ...' : ''}</Text>
             <View style={{ flex: 1, width: '100%' }}>
                 {savedCards.length === 0 ? (
                     <Text style={{ textAlign: 'center', color: '#888', marginTop: 32 }}>No boards saved.</Text>
@@ -345,7 +347,7 @@ export default function BingoBoards() {
                                                 const bitPosition = 24 - (rowIdx * 5 + colIdx);
                                                 const isFilled = (cardsData[idx] & (1 << bitPosition)) !== 0;
                                                 return (
-                                                    <View key={colIdx} style={[bingoStyles.cell,  isFilled && { backgroundColor: '#222', borderColor: '#111' }]}>
+                                                    <View key={colIdx} style={[bingoStyles.cell, isFilled && { backgroundColor: '#222', borderColor: '#111' }]}>
                                                         <Text style={{ fontSize: 13, textAlign: 'center', color: isFilled ? '#fff' : '#222' }}>{cell}</Text>
                                                     </View>
                                                 );
