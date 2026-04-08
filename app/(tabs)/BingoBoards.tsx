@@ -419,7 +419,7 @@ const bingoStyles = StyleSheet.create({
         backgroundColor: '#f9f9f9',
         minHeight: 120,
         maxHeight: 280,
-        maxWidth: "50%",
+        maxWidth: "100%",
         justifyContent: 'center',
         alignItems: 'center',
     },
