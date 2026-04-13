@@ -3,7 +3,7 @@ import { Camera, CameraView } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Easing, Platform, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
+import { Animated, Dimensions, Easing, Platform, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
 
 // Only use tesseract.js for web OCR. For mobile, use react-native-ml-kit/text-recognition.
 const isWeb = Platform.OS === 'web';
@@ -41,6 +41,13 @@ export default function SetupNewGameScreen() {
       newData[row][col] = text;
       return newData;
     });
+  };
+
+  // Function to check if a cell's value is valid
+  const isCellValid = (text: string) => {
+    // TODO: Insert validation logic here. Return true if valid, false if not.
+    // Example: return /^[0-9]+$/.test(text);
+    return true;
   };
 
   // Save current table as a card
@@ -190,6 +197,11 @@ export default function SetupNewGameScreen() {
       setOcrLoading(false);
     }
   };
+
+  const handleRemoveAllCards = () => {
+    setSavedCards([]);
+    ToastAndroid.show('All saved cards removed.', ToastAndroid.SHORT);
+  }
 
   // Responsive sizing
   const screenHeight = Dimensions.get('window').height;
@@ -359,14 +371,28 @@ export default function SetupNewGameScreen() {
               </View>
             ))}
           </View>
-          {/* Render 5 rows, each with 5 columns, showing OCR results */}
+          {/* Render 5 rows, each with 5 columns, showing OCR results and allowing manual entry */}
           {rows.map((_, rowIdx) => (
             <View key={rowIdx} style={styles.tableRow}>
-              {columns.map((_, colIdx) => (
-                <View key={colIdx} style={styles.tableCell}>
-                  <Text style={{ fontSize: 13, textAlign: 'center' }}>{tableData[rowIdx][colIdx]}</Text>
-                </View>
-              ))}
+              {columns.map((_, colIdx) => {
+                const cellValue = tableData[rowIdx][colIdx];
+                const valid = isCellValid(cellValue);
+                return (
+                  <View
+                    key={colIdx}
+                    style={[styles.tableCell, !valid && styles.tableCellInvalid]}
+                  >
+                    <TextInput
+                      style={{ fontSize: 13, textAlign: 'center', padding: 0 }}
+                      value={cellValue}
+                      onChangeText={text => insertTextToTable(rowIdx, colIdx, text)}
+                      maxLength={4}
+                      autoCorrect={false}
+                      autoCapitalize="characters"
+                    />
+                  </View>
+                );
+              })}
             </View>
           ))}
         </View>
@@ -384,11 +410,11 @@ export default function SetupNewGameScreen() {
           </Text>
         </View>
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={[styles.button, { backgroundColor: '#d32f2f' }]} onPress={saveCurrentCard}>
+          <TouchableOpacity style={[styles.button, { backgroundColor: '#d32f2f' }]} onPress={handleRemoveAllCards}>
             <Text style={styles.buttonText}>Remove All Cards</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.statusText}>OCR Result: {ocrLoading ? 'Processing...' : ocrText}</Text>
+        {/* <Text style={styles.statusText}>OCR Result: {ocrLoading ? 'Processing...' : ocrText}</Text> */}
       </View>
   );
 }
@@ -431,6 +457,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ddd',
     backgroundColor: '#fff',
+    justifyContent: 'center',
+  },
+  tableCellInvalid: {
+    backgroundColor: '#ffe0e0', // light red for invalid
+    borderColor: '#d32f2f',
   },
   buttonRow: {
     flexDirection: 'row',
