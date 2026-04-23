@@ -11,7 +11,7 @@ export default function TabLayout() {
   // Helper for left-facing back arrow
   const BackArrow = (options: any) => (
     <Pressable
-      onPress={() => {console.log(options['home']); options['home'] ? router.navigate('/(tabs)') : router.navigate('/(tabs)/setup');}}
+      onPress={() => {options['home'] ? router.navigate('/(tabs)') : router.navigate('/(tabs)/setup');}}
       style={{ marginLeft: 16 }}
       accessibilityLabel="Back to Home"
     >

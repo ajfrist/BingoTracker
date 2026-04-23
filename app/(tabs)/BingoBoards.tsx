@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, BackHandler, Dimensions, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, BackHandler, Dimensions, FlatList, KeyboardAvoidingView, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function BingoBoards() {
     const navigation = useNavigation();
@@ -26,25 +26,37 @@ export default function BingoBoards() {
         return () => handler.remove();
     }, [confirmBack]);
 
+    // Currently called number after hitting 'submit'
     const [called, setCalled] = useState('');
+    // List of all called numbers in this game
     const [allCalled, setAllCalled] = useState<string[]>([]);
+    // Toggle to show all called numbers or just the last 5
+    const [showAllCalled, setShowAllCalled] = useState(false);
+    // Input state for entering called numbers
     const [input, setInput] = useState('');
+    // Indexes of cards being tracked 
     const [trackedCards, setTrackedCards] = useState<number[]>([]); // Indexes of cards being tracked
+    // Cards state of currently marked cells this game, as bitmask (25 bit ints for 5x5 grid) 
     const [cardsData, setCardsData] = useState<number[]>([]);
+    // Store actual card numbers as 2D string arrays
     const [savedCards, setSavedCards] = useState<string[][][]>([]);
+    // Progress for each card based on win method
     const [winProgress, setWinProgress] = useState<number[]>([]); // Progress for each card and each win pattern
+    // Colors for each card (in list view) based on progress
     const [cardColors, setCardColors] = useState<string[]>([]); // Card background colors
     // Initialize empty cards data on mount or when savedCards changes
     useEffect(() => {
         // Track all cards by default
         setTrackedCards(savedCards.map((_, idx) => idx));
-
-        // Initialize empty cards data for bitmasking
-        const initialCards: number[] = [];
-        for (let i = 0; i < savedCards.length; i++) {
-            initialCards.push(0b1000000000000);
+        
+        if (cardsData.length === 0) {
+            // Initialize empty cards data for bitmasking
+            const initialCards: number[] = [];
+            for (let i = 0; i < savedCards.length; i++) {
+                initialCards.push(0b1000000000000);
+            }
+            setCardsData(initialCards);
         }
-        setCardsData(initialCards);
     }, [savedCards.length]);
 
     // Update savedCards from params on reload
@@ -69,6 +81,11 @@ export default function BingoBoards() {
         let normalizedInput = input.replace(/\D/g, '');
         if (normalizedInput === '') {
             Alert.alert('Invalid Input', 'Please enter a valid number.');
+            return;
+        }
+        // Ensure called number has not been called before
+        if (allCalled.includes(normalizedInput)) {
+            Alert.alert('Number Already Called', `The number ${normalizedInput} has already been called.`);
             return;
         }
 
@@ -127,11 +144,9 @@ export default function BingoBoards() {
 
     const handleZoomCard = (idx: number) => {
         setZoomedCardIdx(idx);
-        console.log('Zooming card', idx);
     };
 
     const handleBackFromZoom = () => {
-        console.log('Closing zoom view', zoomedCardIdx);
         setZoomedCardIdx(-1);
     };
 
@@ -143,6 +158,27 @@ export default function BingoBoards() {
         }
 
         setZoomedCardIdx(-1);
+    };
+
+    const handleDeleteCard = () => {
+        if (zoomedCardIdx < 0 || zoomedCardIdx >= savedCards.length) return;
+        Alert.alert(
+            'Delete Card',
+            'Are you sure you want to delete this card?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Yes', style: 'destructive', onPress: () => {
+                        setSavedCards(prev => prev.filter((_, i) => i !== zoomedCardIdx));
+                        setTrackedCards(prev => prev.filter(idx => idx !== zoomedCardIdx).map(idx => idx > zoomedCardIdx ? idx - 1 : idx));
+                        setCardsData(prev => prev.filter((_, i) => i !== zoomedCardIdx));
+                        setWinProgress(prev => prev.filter((_, i) => i !== zoomedCardIdx));
+                        setCardColors(prev => prev.filter((_, i) => i !== zoomedCardIdx));
+                        setZoomedCardIdx(-1);
+                    }
+                },
+            ]
+        );
     };
 
     const winMethods: Record<string, number[]> = {
@@ -164,6 +200,7 @@ export default function BingoBoards() {
         "Blackout": [0b1111111111111111111111111],
         "T": [0b1111100100001000010000100],
         "X": [0b1000101010001000101010001],
+        "L": [0b1000010000100001000011111],
         "Plus": [0b10000100111110010000100],
         "Postage Stamp": [0b1100011000000000000000]
     };
@@ -220,10 +257,6 @@ export default function BingoBoards() {
                 color = '#fb8c00'; // Orange
             } else if (progress === 3) {
                 color = '#fdd835'; // Yellow
-            } else if (progress === 4) {
-                color = '#aed581'; // Light green
-            } else if (progress === 5) {
-                color = '#81c784'; // Green
             }
             newColors.push(color);
         }
@@ -267,7 +300,7 @@ export default function BingoBoards() {
     };
 
     return (
-        <View style={{ flex: 1, padding: 16, backgroundColor: '#fff' }}>
+        <KeyboardAvoidingView style={{ flex: 1, padding: 16, backgroundColor: '#fff' }} behavior="padding">
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center'}}>
                 <Text style={{ fontSize: 20, fontWeight: 'bold' }}>Win Method: </Text>
                 <View>
@@ -323,7 +356,24 @@ export default function BingoBoards() {
                     <Text style={{ color: '#fff', fontWeight: 'bold' }}>Submit</Text>
                 </TouchableOpacity>
             </View>
-            <Text style={{ fontSize: 16, marginBottom: 5 }}>Called: {allCalled.toReversed().slice(0, Math.min(10, allCalled.length)).join(', ')}{allCalled.length>10 ? ', ...' : ''}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5, justifyContent: 'space-between' }}>
+                <Text style={{ fontSize: 16, flexShrink: 1 }}>
+                    Called: {allCalled.toReversed().slice(0, showAllCalled ? Math.min(100, allCalled.length) : Math.min(5, allCalled.length)).join(', ')}
+                    {allCalled.length > (showAllCalled ? 100 : 5) ? ', ...' : ''}
+                </Text>
+                <TouchableOpacity
+                    style={{
+                        marginLeft: 10,
+                        paddingHorizontal: 20,
+                        paddingVertical: 4,
+                        borderRadius: 6,
+                        backgroundColor: '#1976d2',
+                    }}
+                    onPress={() => setShowAllCalled(v => !v)}
+                >
+                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>{showAllCalled ? '^' : 'v'}</Text>
+                </TouchableOpacity>
+            </View>
             <View style={{ flex: 1, width: '100%' }}>
                 {savedCards.length === 0 ? (
                     <Text style={{ textAlign: 'center', color: '#888', marginTop: 32 }}>No boards saved.</Text>
@@ -358,7 +408,7 @@ export default function BingoBoards() {
                     />
                 )}
             </View>
-            <TouchableOpacity style={bingoStyles.clearButton} onPress={handleClear}>
+            <TouchableOpacity style={[bingoStyles.clearButton, { marginBottom: 16 }]} onPress={handleClear}>
                 <Text style={{ color: '#fff', fontWeight: 'bold' }}>New Game (Clear Board Markers)</Text>
             </TouchableOpacity>
             {/* Card Zoom Modal */}
@@ -392,10 +442,13 @@ export default function BingoBoards() {
                                 ))}
                                 <View style={{ flexDirection: 'row', marginTop: 22, justifyContent: 'space-between', width: '100%' }}>
                                     <TouchableOpacity style={[bingoStyles.modalButton, { backgroundColor: '#1976d2' }]} onPress={handleBackFromZoom}>
-                                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Back</Text>
+                                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>Back</Text>
                                     </TouchableOpacity>
-                                    <TouchableOpacity style={[bingoStyles.modalButton, { backgroundColor: '#d32f2f' }]} onPress={handleStopTracking}>
-                                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>{trackedCards.includes(zoomedCardIdx) ? 'Stop Tracking' : 'Start Tracking'}</Text>
+                                    <TouchableOpacity style={[bingoStyles.modalButton, { backgroundColor: trackedCards.includes(zoomedCardIdx) ? '#212121' : '#4caf50' }]} onPress={handleStopTracking}>
+                                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>{trackedCards.includes(zoomedCardIdx) ? 'Stop Tracking' : 'Start Tracking'}</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={[bingoStyles.modalButton, { backgroundColor: '#d32f2f' }]} onPress={handleDeleteCard}>
+                                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16, textAlign: 'center' }}>Delete Card</Text>
                                     </TouchableOpacity>
                                 </View>
                             </>
@@ -403,7 +456,7 @@ export default function BingoBoards() {
                     </View>
                 </View>
             </Modal>
-        </View>
+        </KeyboardAvoidingView>
     );
 }
 
@@ -482,6 +535,7 @@ const bingoStyles = StyleSheet.create({
         paddingVertical: 12,
         borderRadius: 8,
         alignItems: 'center',
+        justifyContent: 'center',
     },
     clearButton: {
         backgroundColor: '#d32f2f',

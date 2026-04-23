@@ -68,15 +68,15 @@ export default function SetupNewGameScreen() {
   const isCellValid = (colIdx: number, text: string) => {
     // Ensure text is 1-2 characters and a number between 0-99
     if (text.length >= 1 && text.length <= 2 && (/^(7[0-5]|[1-6]?[0-9])$/.test(text))) {
-      if (colIdx === 0 && (/^([1-9][0-5]?)$/.test(text))) { // B column
+      if (colIdx === 0 && (/^([0-9]|1[0-5])$/.test(text))) { // B column
         return true;
-      } else if (colIdx === 1 && (/^(1[6-9]|2[0-9])$/.test(text))) { // I column
+      } else if (colIdx === 1 && (/^(1[6-9]|2[0-9]|30)$/.test(text))) { // I column
         return true;
-      } else if (colIdx === 2 && (/^(3[0-9]|4[0-5])$/.test(text))) { // N column
+      } else if (colIdx === 2 && (/^(3[1-9]|4[0-5])$/.test(text))) { // N column
         return true;
-      } else if (colIdx === 3 && (/^(4[6-9]|5[0-9])$/.test(text))) { // G column
+      } else if (colIdx === 3 && (/^(4[6-9]|5[0-9]|60)$/.test(text))) { // G column
         return true;
-      } else if (colIdx === 4 && (/^(6[0-9]|7[0-5])$/.test(text))) { // O column
+      } else if (colIdx === 4 && (/^(6[1-9]|7[0-5])$/.test(text))) { // O column
         return true;
       }
     }
@@ -262,6 +262,37 @@ export default function SetupNewGameScreen() {
   const columns = ['B', 'I', 'N', 'G', 'O'];
   const rows = Array.from({ length: 5 });
 
+  // Helper: Find duplicate values in table (excluding center cell and empty strings)
+  const getDuplicatePositions = (table: string[][]) => {
+    const valueMap = new Map<string, Array<[number, number]>>();
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        if (r === 2 && c === 2) continue; // skip center
+        const val = table[r][c];
+        if (val && val.trim() !== '') {
+          if (!valueMap.has(val)) valueMap.set(val, []);
+          valueMap.get(val)!.push([r, c]);
+        }
+      }
+    }
+    // Only keep positions for values that appear more than once
+    const duplicates = new Set<string>();
+    valueMap.forEach((positions, val) => {
+      if (positions.length > 1) {
+        duplicates.add(val);
+      }
+    });
+    // Return a set of string keys for quick lookup: `${r},${c}`
+    const dupPositions = new Set<string>();
+    valueMap.forEach((positions, val) => {
+      if (duplicates.has(val)) {
+        positions.forEach(([r, c]) => dupPositions.add(`${r},${c}`));
+      }
+    });
+    return dupPositions;
+  };
+  const duplicatePositions = getDuplicatePositions(tableData);
+
   // Animated value for corner breathing
   const cornerAnim = useRef(new Animated.Value(0)).current;
 
@@ -424,10 +455,16 @@ export default function SetupNewGameScreen() {
                 const cellValue = tableData[rowIdx][colIdx];
                 const valid = isCellValid(colIdx, cellValue);
                 const isCenter = rowIdx === 2 && colIdx === 2;
+                const isDuplicate = duplicatePositions.has(`${rowIdx},${colIdx}`);
                 return (
                   <View
                     key={colIdx}
-                    style={[styles.tableCell, !valid && !isCenter && styles.tableCellInvalid, isCenter && { backgroundColor: '#e0ffe0', borderColor: '#388e3c' }]}
+                    style={[
+                      styles.tableCell,
+                      !valid && !isCenter && styles.tableCellInvalid,
+                      isCenter && { backgroundColor: '#e0ffe0', borderColor: '#388e3c' },
+                      isDuplicate && !isCenter && styles.tableCellDuplicate,
+                    ]}
                   >
                     {isCenter ? (
                       <Text style={{ fontSize: 13, textAlign: 'center', fontWeight: 'bold', color: '#388e3c' }}>Free</Text>
@@ -440,7 +477,6 @@ export default function SetupNewGameScreen() {
                         autoCorrect={false}
                         autoCapitalize="characters"
                         keyboardType='numeric'
-
                       />
                     )}
                   </View>
@@ -513,7 +549,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tableCellInvalid: {
-    backgroundColor: '#ffe0e0', // light red for invalid
+    backgroundColor: '#ffc0c0', // light red for invalid
+    borderColor: '#d32f2f',
+  },
+  tableCellDuplicate: {
+    backgroundColor: '#ff8888', // light red for duplicate
     borderColor: '#d32f2f',
   },
   buttonRow: {
