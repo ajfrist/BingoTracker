@@ -44,6 +44,9 @@ export default function BingoBoards() {
     const [winProgress, setWinProgress] = useState<number[]>([]); // Progress for each card and each win pattern
     // Colors for each card (in list view) based on progress
     const [cardColors, setCardColors] = useState<string[]>([]); // Card background colors
+    // Mask toggle state
+    const [maskEnabled, setMaskEnabled] = useState(false);
+
     // Initialize empty cards data on mount or when savedCards changes
     useEffect(() => {
         // Track all cards by default
@@ -77,20 +80,20 @@ export default function BingoBoards() {
     const [zoomedCardIdx, setZoomedCardIdx] = useState<number>(-1);
 
     const handleSubmit = () => {
-        // Normalize input by stripping non-digit characters
-        let normalizedInput = input.replace(/\D/g, '');
-        if (normalizedInput === '') {
-            Alert.alert('Invalid Input', 'Please enter a valid number.');
+        // Only allow numbers 1-75 (character sensitive)
+        const regex = /^(?:[1-9]|[1-6][0-9]|7[0-5])$/;
+        if (!regex.test(input)) {
+            Alert.alert('Invalid Input', 'Please enter a number from 1 to 75.');
             return;
         }
         // Ensure called number has not been called before
-        if (allCalled.includes(normalizedInput)) {
-            Alert.alert('Number Already Called', `The number ${normalizedInput} has already been called.`);
+        if (allCalled.includes(input)) {
+            Alert.alert('Number Already Called', `The number ${input} has already been called.`);
             return;
         }
 
-        setCalled(normalizedInput);
-        setAllCalled(prev => [...prev, normalizedInput]);
+        setCalled(input);
+        setAllCalled(prev => [...prev, input]);
         setInput('');
     };
 
@@ -264,26 +267,27 @@ export default function BingoBoards() {
         setCardColors(newColors);
     }, [winMethod, cardsData, trackedCards]);
 
-    // Update the state of each card when a number is called
+    // Update the state of each card when a number is called or removed
     useEffect(() => {
-        if (called === '') return;
-        const updatedCardsData = cardsData.map((cardData, cardIdx) => {
-            let updatedCardData = cardData;
-            const card = savedCards[cardIdx];
-            for (let row = 0; row < 5; row++) {
-                for (let col = 0; col < 5; col++) {
-                    const cellValue = card[row][col];
-                    if (cellValue === called) {
-                        const bitPosition = 24 - (row * 5 + col);
-                        updatedCardData = updatedCardData | (1 << bitPosition);
-                        break;
+        // Recompute cardsData from scratch based on allCalled
+        if (!savedCards.length) return;
+        const updatedCardsData = savedCards.map((card, cardIdx) => {
+            let cardData = 0b1000000000000; // initial state
+            for (let calledNum of allCalled) {
+                for (let row = 0; row < 5; row++) {
+                    for (let col = 0; col < 5; col++) {
+                        const cellValue = card[row][col];
+                        if (cellValue === calledNum) {
+                            const bitPosition = 24 - (row * 5 + col);
+                            cardData = cardData | (1 << bitPosition);
+                        }
                     }
                 }
             }
-            return updatedCardData;
+            return cardData;
         });
         setCardsData(updatedCardsData);
-    }, [called]);
+    }, [allCalled, savedCards.length]);
 
     // Setup for custom dropdown menu (Picker alternative)
     const [open, setOpen] = useState(false);
@@ -301,42 +305,66 @@ export default function BingoBoards() {
 
     return (
         <KeyboardAvoidingView style={{ flex: 1, padding: 16, backgroundColor: '#fff' }} behavior="padding">
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center'}}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                 <Text style={{ fontSize: 20, fontWeight: 'bold' }}>Win Method: </Text>
                 <View>
-                {/* Trigger */}
-                <Pressable ref={triggerRef} style={bingoStyles.dropdownTrigger} onPress={openDropdown}>
-                <Text>{selected}</Text>
-                </Pressable>
-                {/* Dropdown */}
-                <Modal transparent visible={open} animationType="fade">
-                <Pressable style={bingoStyles.dropdownOverlay} onPress={() => setOpen(false)}>
-                    <View
-                    style={[
-                        bingoStyles.dropdownMenu,
-                        {
-                        top: position.y,
-                        left: position.x,
-                        width: position.width,
-                        },
-                    ]}
-                >
-                    {Object.keys(winMethods).map((option ) => (
-                        <Pressable
-                        key={option}
-                        style={bingoStyles.dropdownItem}
-                        onPress={() => {
-                            setSelected(option);
-                            setOpen(false);
-                            setWinMethod(option);
-                        }}
-                        >
-                        <Text>{option}</Text>
+                    {/* Trigger */}
+                    <Pressable ref={triggerRef} style={bingoStyles.dropdownTrigger} onPress={openDropdown}>
+                        <Text>{selected}</Text>
+                    </Pressable>
+                    {/* Dropdown */}
+                    <Modal transparent visible={open} animationType="fade">
+                        <Pressable style={bingoStyles.dropdownOverlay} onPress={() => setOpen(false)}>
+                            <View
+                                style={[
+                                    bingoStyles.dropdownMenu,
+                                    {
+                                        top: position.y,
+                                        left: position.x,
+                                        width: position.width,
+                                    },
+                                ]}
+                            >
+                                {Object.keys(winMethods).map((option) => (
+                                    <Pressable
+                                        key={option}
+                                        style={bingoStyles.dropdownItem}
+                                        onPress={() => {
+                                            setSelected(option);
+                                            setOpen(false);
+                                            setWinMethod(option);
+                                        }}
+                                    >
+                                        <Text>{option}</Text>
+                                    </Pressable>
+                                ))}
+                            </View>
                         </Pressable>
-                    ))}
-                    </View>
-                </Pressable>
-                </Modal>
+                    </Modal>
+                </View>
+                {/* Mask toggle button */}
+                <View style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <Pressable
+                        onPress={() => setMaskEnabled((v) => !v)}
+                        style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 14,
+                            borderWidth: 2,
+                            borderColor: maskEnabled ? '#1976d2' : '#bbb',
+                            backgroundColor: maskEnabled ? '#1976d2' : '#fff',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginLeft: 12,
+                        }}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: maskEnabled }}
+                    >
+                        {maskEnabled ? (
+                            <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: '#fff' }} />
+                        ) : null}
+                    </Pressable>
+                    <Text style={{ fontSize: 16, marginLeft: 12, marginRight: 2 }}>Mask</Text>
                 </View>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10, marginTop: 8, paddingLeft: 40 }}>
@@ -356,23 +384,58 @@ export default function BingoBoards() {
                     <Text style={{ color: '#fff', fontWeight: 'bold' }}>Submit</Text>
                 </TouchableOpacity>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5, justifyContent: 'space-between' }}>
-                <Text style={{ fontSize: 16, flexShrink: 1 }}>
-                    Called: {allCalled.toReversed().slice(0, showAllCalled ? Math.min(100, allCalled.length) : Math.min(5, allCalled.length)).join(', ')}
-                    {allCalled.length > (showAllCalled ? 100 : 5) ? ', ...' : ''}
-                </Text>
-                <TouchableOpacity
-                    style={{
-                        marginLeft: 10,
-                        paddingHorizontal: 20,
-                        paddingVertical: 4,
-                        borderRadius: 6,
-                        backgroundColor: '#1976d2',
-                    }}
-                    onPress={() => setShowAllCalled(v => !v)}
-                >
-                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>{showAllCalled ? '^' : 'v'}</Text>
-                </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5, justifyContent: 'space-between', width: '90%' }}>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', maxWidth: '75%', alignItems: 'center' }}>
+                        <Text>Called: </Text>{allCalled
+                            .toReversed()
+                            .slice(0, showAllCalled ? Math.min(100, allCalled.length) : Math.min(5, allCalled.length))
+                            .map((num, idx) => (
+                                <TouchableOpacity
+                                    key={num + '-' + idx}
+                                    onPress={() => {
+                                        Alert.alert(
+                                            'Remove Called Number',
+                                            `Remove ${num} from called numbers?`,
+                                            [
+                                                { text: 'Cancel', style: 'cancel' },
+                                                {
+                                                    text: 'Yes', style: 'destructive', onPress: () => {
+                                                        // Remove the number from allCalled
+                                                        setAllCalled(prev => {
+                                                            const reversed = [...prev].reverse();
+                                                            reversed.splice(idx, 1);
+                                                            return reversed.reverse();
+                                                        });
+                                                        // If the removed number was the last called, clear 'called'
+                                                        if (allCalled[allCalled.length - 1 - idx] === called) {
+                                                            setCalled('');
+                                                        }
+                                                    }
+                                                },
+                                            ]
+                                        );
+                                    }}
+                                    style={{ marginRight: 4, marginBottom: 2, paddingHorizontal: 3, paddingVertical: 1, borderRadius: 4, backgroundColor: '#e3f2fd', borderWidth: 1, borderColor: '#1976d2' }}
+                                >
+                                    <Text style={{ color: '#1976d2', fontWeight: 'bold', fontSize: 15 }}>{num}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        {allCalled.length > (showAllCalled ? 100 : 5) ? <Text>, ...</Text> : null}
+                    </View>
+                    <TouchableOpacity
+                        style={{
+                            marginLeft: 10,
+                            paddingHorizontal: 20,
+                            paddingVertical: 4,
+                            borderRadius: 6,
+                            backgroundColor: '#1976d2',
+                        }}
+                        onPress={() => setShowAllCalled(v => !v)}
+                    >
+                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>{showAllCalled ? '^' : 'v'}</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
             <View style={{ flex: 1, width: '100%' }}>
                 {savedCards.length === 0 ? (
@@ -394,9 +457,23 @@ export default function BingoBoards() {
                                                 // Calculate bit position for this cell
                                                 const bitPosition = 24 - (rowIdx * 5 + colIdx);
                                                 const isFilled = (cardsData[idx] & (1 << bitPosition)) !== 0;
+                                                // Mask logic: if maskEnabled and winMethod !== 'Traditional', mask cells not in win pattern
+                                                let masked = false;
+                                                if (maskEnabled && winMethod !== 'Traditional') {
+                                                    const winPatterns = winMethods[winMethod];
+                                                    // If this bit is not set in any win pattern, mask it
+                                                    masked = !winPatterns.some((pattern) => (pattern & (1 << bitPosition)) !== 0);
+                                                }
                                                 return (
-                                                    <View key={colIdx} style={[bingoStyles.cell, isFilled && { backgroundColor: '#222', borderColor: '#111' }]}>
-                                                        <Text style={{ fontSize: 13, textAlign: 'center', color: isFilled ? '#fff' : '#222' }}>{cell}</Text>
+                                                    <View
+                                                        key={colIdx}
+                                                        style={[
+                                                            bingoStyles.cell,
+                                                            isFilled && { backgroundColor: '#222', borderColor: '#111' },
+                                                            masked && { backgroundColor: '#888', borderColor: '#333' },
+                                                        ]}
+                                                    >
+                                                        <Text style={{ fontSize: 13, textAlign: 'center', color: masked ? '#bbb' : isFilled ? '#fff' : '#222' }}>{cell}</Text>
                                                     </View>
                                                 );
                                             })}
@@ -429,12 +506,22 @@ export default function BingoBoards() {
                                             // Calculate bit position for this cell
                                             const bitPosition = 24 - (rowIdx * 5 + colIdx);
                                             const isFilled = (cardsData[zoomedCardIdx] & (1 << bitPosition)) !== 0;
+                                            // Mask logic: if maskEnabled and winMethod !== 'Traditional', mask cells not in win pattern
+                                            let masked = false;
+                                            if (maskEnabled && winMethod !== 'Traditional') {
+                                                const winPatterns = winMethods[winMethod];
+                                                masked = !winPatterns.some((pattern) => (pattern & (1 << bitPosition)) !== 0);
+                                            }
                                             return (
                                                 <View
                                                     key={colIdx}
-                                                    style={[bingoStyles.zoomedCell, isFilled && { backgroundColor: '#222', borderColor: '#111' }]}
+                                                    style={[
+                                                        bingoStyles.zoomedCell,
+                                                        isFilled && { backgroundColor: '#222', borderColor: '#111' },
+                                                        masked && { backgroundColor: '#888', borderColor: '#333' },
+                                                    ]}
                                                 >
-                                                    <Text style={{ fontSize: 20, textAlign: 'center', color: isFilled ? '#fff' : '#222' }}>{cell}</Text>
+                                                    <Text style={{ fontSize: 20, textAlign: 'center', color: masked ? '#bbb' : isFilled ? '#fff' : '#222' }}>{cell}</Text>
                                                 </View>
                                             );
                                         })}
