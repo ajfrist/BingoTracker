@@ -36,6 +36,9 @@ export default function BingoBoards() {
     const [cardColors, setCardColors] = useState<string[]>([]); // Card background colors
     // Initialize empty cards data on mount or when savedCards changes
     useEffect(() => {
+        // Track all cards by default
+        setTrackedCards(savedCards.map((_, idx) => idx));
+
         // Initialize empty cards data for bitmasking
         const initialCards: number[] = [];
         for (let i = 0; i < savedCards.length; i++) {
@@ -47,8 +50,16 @@ export default function BingoBoards() {
     // Update savedCards from params on reload
     const { cardsJSON } = useLocalSearchParams<{ cardsJSON: string; }>();
     useEffect(() => {
-        setSavedCards(JSON.parse(cardsJSON) || []);
-        setTrackedCards(savedCards.map((_, idx) => idx));
+        const cards = JSON.parse(cardsJSON) || [];
+        setSavedCards(cards);
+        // Save to AsyncStorage as cached boards
+        (async () => {
+            try {
+                await AsyncStorage.setItem('cached_current_boards', JSON.stringify(cards));
+            } catch (e) {
+                console.error('Failed to cache boards:', e);
+            }
+        })();
     }, [cardsJSON]);
 
     const [zoomedCardIdx, setZoomedCardIdx] = useState<number>(-1);
@@ -84,7 +95,8 @@ export default function BingoBoards() {
                                 allCalled,
                                 winMethod,
                                 cardsData,
-                                winProgress
+                                winProgress,
+                                trackedCards,
                             };
                             // Fetch existing games for this date
                             const storageKey = `bingo_games_${dateKey}`;
@@ -131,21 +143,7 @@ export default function BingoBoards() {
         }
 
         setZoomedCardIdx(-1);
-
     };
-
-    useEffect(() => {
-        // Iterate over cardsData to update tracked color cards
-        let newColors: string[] = [];
-        for (let i = 0; i < cardsData.length; i++) {
-            if (!(trackedCards.includes(i))) {
-                newColors.push('#212121ff');
-            } else {
-                newColors.push('#f9f9f9');
-            }
-        }
-        setCardColors(newColors);
-    }, [trackedCards]);
 
     const winMethods: Record<string, number[]> = {
         "Traditional": [

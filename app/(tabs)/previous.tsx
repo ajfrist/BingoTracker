@@ -13,6 +13,7 @@ type GameData = {
   winMethod: string;
   cardsData: number[];
   winProgress: number[];
+  trackedCards: number[];
 };
 
 type DateGames = {
@@ -137,7 +138,7 @@ export default function PreviousGamesScreen() {
             const isFilled = (game.cardsData[cardIdx] & (1 << bitPosition)) !== 0;
             return (
               <View key={colIdx} style={[styles.cell, isFilled && { backgroundColor: '#222', borderColor: '#111' }]}>
-                <Text style={{ fontSize: 13, color: isFilled ? '#fff' : '#222' }}>{cell}</Text>
+                <Text style={{ fontSize: 11, color: isFilled ? '#fff' : '#222' }}>{cell}</Text>
               </View>
             );
           })}
@@ -152,6 +153,15 @@ export default function PreviousGamesScreen() {
     if (selectedDateIdx === null) return null;
     const dateObj = dateGames[selectedDateIdx];
     const game = dateObj.games[selectedGameIdx];
+    // Handler to load boards from this game into cached boards
+    const handleLoadBoardsToCache = async () => {
+      try {
+        await AsyncStorage.setItem('cached_current_boards', JSON.stringify(game.cards));
+        Alert.alert('Boards Loaded', 'Boards from this game are now cached and ready to use.');
+      } catch (e) {
+        Alert.alert('Error', 'Failed to cache boards.');
+      }
+    };
     return (
       <Modal
         visible={modalVisible}
@@ -180,6 +190,9 @@ export default function PreviousGamesScreen() {
                 <Text style={{ fontSize: 18 }}>{'>'}</Text>
               </TouchableOpacity>
             </View>
+            <TouchableOpacity onPress={handleLoadBoardsToCache} style={{ backgroundColor: '#1976d2', padding: 10, borderRadius: 8, alignItems: 'center', marginBottom: 8 }}>
+              <Text style={{ color: '#fff', fontWeight: 'bold' }}>Load These Boards for New Game</Text>
+            </TouchableOpacity>
             <ScrollView contentContainerStyle={{ alignItems: 'center', paddingBottom: 16 }}>
               <Text style={{ fontWeight: 'bold', fontSize: 15, marginBottom: 6 }}>Win Method: {game.winMethod}</Text>
               <Text style={{ fontSize: 14, marginBottom: 6 }}>Numbers Called: {game.allCalled?.join(', ')}</Text>
@@ -195,7 +208,7 @@ export default function PreviousGamesScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title">Previous Games</ThemedText>
+      <ThemedText type="title" style={{ color: '#604ebfff' }}>Previous Games</ThemedText>
       {loading ? (
         <Text style={{ marginTop: 24 }}>Loading...</Text>
       ) : dateGames.length === 0 ? (

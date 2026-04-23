@@ -1,8 +1,10 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import textRecognition, { TextRecognitionScript } from '@react-native-ml-kit/text-recognition';
+import { useFocusEffect } from '@react-navigation/native';
 import { Camera, CameraView } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Easing, Platform, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
 
 // Only use tesseract.js for web OCR. For mobile, use react-native-ml-kit/text-recognition.
@@ -29,13 +31,32 @@ export default function SetupNewGameScreen() {
   const [ocrLoading, setOcrLoading] = useState(false);
 
   // Table state for OCR results (5x5 grid)
-  const [tableData, setTableData] = useState<string[][]>(Array.from({ length: 5 }, () => Array(5).fill('')));
+  const initialTable = Array.from({ length: 5 }, (_, r) =>
+    Array.from({ length: 5 }, (_, c) => (r === 2 && c === 2 ? 'Free' : ''))
+  );
+  const [tableData, setTableData] = useState<string[][]>(initialTable);
 
   // Array of bingo cards (each is a 5x5 array)
   const [savedCards, setSavedCards] = useState<string[][][]>([]);
 
+  // Load cached boards if present
+  useFocusEffect(useCallback(() => {
+      (async () => {
+        try {
+          const cached = await AsyncStorage.getItem('cached_current_boards');
+          if (cached) {
+            setSavedCards(JSON.parse(cached));
+          }
+        } catch (e) {
+          // Ignore errors
+        }
+      })();
+    }, [])
+  );
+
   // Function to insert text into the table by row and column
   const insertTextToTable = (row: number, col: number, text: string) => {
+    if (row === 2 && col === 2) return; // Center cell is not editable
     setTableData(prev => {
       const newData = prev.map(arr => [...arr]);
       newData[row][col] = text;
@@ -43,17 +64,29 @@ export default function SetupNewGameScreen() {
     });
   };
 
-  // Function to check if a cell's value is valid
-  const isCellValid = (text: string) => {
-    // TODO: Insert validation logic here. Return true if valid, false if not.
-    // Example: return /^[0-9]+$/.test(text);
-    return true;
+  // Function to check if a cell's value is valid: changes background color if invalid
+  const isCellValid = (colIdx: number, text: string) => {
+    // Ensure text is 1-2 characters and a number between 0-99
+    if (text.length >= 1 && text.length <= 2 && (/^(7[0-5]|[1-6]?[0-9])$/.test(text))) {
+      if (colIdx === 0 && (/^([1-9][0-5]?)$/.test(text))) { // B column
+        return true;
+      } else if (colIdx === 1 && (/^(1[6-9]|2[0-9])$/.test(text))) { // I column
+        return true;
+      } else if (colIdx === 2 && (/^(3[0-9]|4[0-5])$/.test(text))) { // N column
+        return true;
+      } else if (colIdx === 3 && (/^(4[6-9]|5[0-9])$/.test(text))) { // G column
+        return true;
+      } else if (colIdx === 4 && (/^(6[0-9]|7[0-5])$/.test(text))) { // O column
+        return true;
+      }
+    }
+    return false;
   };
 
   // Save current table as a card
   const saveCurrentCard = () => {
     setSavedCards(prev => [...prev, tableData.map(row => [...row])]);
-    setTableData(Array.from({ length: 5 }, () => Array(5).fill('')));
+    setTableData(initialTable);
   };
 
   useEffect(() => {
@@ -110,6 +143,10 @@ export default function SetupNewGameScreen() {
           for (let row = 0; row < gridRows; row++) {
             const rowResults: string[] = [];
             for (let col = 0; col < gridCols; col++) {
+              if (row === 2 && col === 2) {
+                rowResults.push('Free');
+                continue;
+              }
               const cellCanvas = document.createElement('canvas');
               cellCanvas.width = cellWidth;
               cellCanvas.height = cellHeight;
@@ -152,6 +189,10 @@ export default function SetupNewGameScreen() {
           for (let row = 0; row < gridRows; row++) {
             const rowPromises: Promise<{ row: number; col: number; text: string }>[] = [];
             for (let col = 0; col < gridCols; col++) {
+              if (row === 2 && col === 2) {
+                rowPromises.push(Promise.resolve({ row, col, text: 'Free' }));
+                continue;
+              }
               const crop = {
                 originX: Math.round(col * cellWidth),
                 originY: Math.round(row * cellHeight),
@@ -198,8 +239,13 @@ export default function SetupNewGameScreen() {
     }
   };
 
-  const handleRemoveAllCards = () => {
+  const handleRemoveAllCards = async () => {
     setSavedCards([]);
+    try {
+      await AsyncStorage.removeItem('cached_current_boards');
+    } catch (e) {
+      // Ignore errors
+    }
     ToastAndroid.show('All saved cards removed.', ToastAndroid.SHORT);
   }
 
@@ -248,7 +294,7 @@ export default function SetupNewGameScreen() {
   return (
 
       <View style={styles.container}>
-        <View style={{ width: '100%', alignItems: 'center', marginBottom: 16 }}>
+        <View style={{ width: '100%', alignItems: 'center', marginBottom: 12 }}>
           <Text style={{ fontSize: 24, fontWeight: 'bold', letterSpacing: 1 }}>
             Scan Your Cards
           </Text>
@@ -357,7 +403,7 @@ export default function SetupNewGameScreen() {
           />
         </View>
 
-        <View style={[styles.buttonRow, { margin: 12, maxWidth: 200 }]}>
+        <View style={[styles.buttonRow, { margin: 7, maxWidth: 200 }]}>
           <TouchableOpacity style={styles.button} onPress={handleScan} disabled={ocrLoading}>
             <Text style={styles.buttonText}>{ocrLoading ? 'Scanning...' : 'Scan'}</Text>
           </TouchableOpacity>
@@ -376,20 +422,27 @@ export default function SetupNewGameScreen() {
             <View key={rowIdx} style={styles.tableRow}>
               {columns.map((_, colIdx) => {
                 const cellValue = tableData[rowIdx][colIdx];
-                const valid = isCellValid(cellValue);
+                const valid = isCellValid(colIdx, cellValue);
+                const isCenter = rowIdx === 2 && colIdx === 2;
                 return (
                   <View
                     key={colIdx}
-                    style={[styles.tableCell, !valid && styles.tableCellInvalid]}
+                    style={[styles.tableCell, !valid && !isCenter && styles.tableCellInvalid, isCenter && { backgroundColor: '#e0ffe0', borderColor: '#388e3c' }]}
                   >
-                    <TextInput
-                      style={{ fontSize: 13, textAlign: 'center', padding: 0 }}
-                      value={cellValue}
-                      onChangeText={text => insertTextToTable(rowIdx, colIdx, text)}
-                      maxLength={4}
-                      autoCorrect={false}
-                      autoCapitalize="characters"
-                    />
+                    {isCenter ? (
+                      <Text style={{ fontSize: 13, textAlign: 'center', fontWeight: 'bold', color: '#388e3c' }}>Free</Text>
+                    ) : (
+                      <TextInput
+                        style={{ fontSize: 13, textAlign: 'center', padding: 0 }}
+                        value={cellValue}
+                        onChangeText={text => insertTextToTable(rowIdx, colIdx, text)}
+                        maxLength={2}
+                        autoCorrect={false}
+                        autoCapitalize="characters"
+                        keyboardType='numeric'
+
+                      />
+                    )}
                   </View>
                 );
               })}
@@ -424,13 +477,13 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    padding: 16,
+    padding: 10,
     backgroundColor: '#fff',
   },
   cameraContainer: {
     borderRadius: 10,
     backgroundColor: '#222',
-    marginBottom: 10,
+    marginBottom: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
