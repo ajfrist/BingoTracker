@@ -1,50 +1,95 @@
-# Welcome to your Expo app 👋
+# <img src="assets/images/android-icon-foreground_bingo.png" alt="BingoTracker Icon" width="300" />
+# Bingo Tracker
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+- A lightweight React Native app (Expo + TypeScript) for creating and playing multiple Bingo boards, scanning full cards, and managing previous game boards.
 
-## Get started
+- Track and play all your Bingo boards at the same time without ever marking them! You can even play the same boards between different rounds! 
 
-1. Install dependencies
+- This app is for all people interested in Bingo! Try it for fun or to play competitively!
+
+**Features**
+- Create and manage multiple bingo boards
+# <img src="assets/images/screenshot_bingo_boards.jpg" alt="screenshot bingo boards" width="150" />
+- Full-card OCR scanning
+# <img src="assets/images/screenshot_ocr.jpg" alt="screenshot ocr" width="150" />
+- Mark/unmark numbers interactively as they are called
+# <img src="assets/images/screenshot_remove_number.jpg" alt="screenshot remove number" width="150" />
+- Save and view previous boards and games played
+# <img src="assets/images/screenshot_previous_games.jpg" alt="screenshot previous games" width="150" />
+
+**Tech stack**
+- **React Native** (**TypeScript**)
+- **Expo tooling** (app.json, expo-env.d.ts)
+- **Android native build files** present (`android/` with Gradle)
+- **MLKit** for scanning Bingo Boards
+
+## Prerequisites
+- Node.js - [Download and install here](https://nodejs.org/en/download)
+- Yarn or npm
+- For Android builds: Android SDK (minimum Android SDK Platform 35) - follow directions [here](https://reactnative.dev/docs/set-up-your-environment) to set up the SDK with Android Studio
+
+## Quick Setup 
+1. Clone the repo and open it:
+
+   ```bash
+   git clone <repo-url>
+   cd bingo_track_init
+   ```
+
+2. Install JS dependencies (choose one):
 
    ```bash
    npm install
+   # or
+   yarn install
    ```
 
-2. Start the app
+3. Start the Metro/Expo dev server:
 
    ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Installation on Android Device with React Native
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+Run the application natively on an Android device or emulator. 
 
-## Get a fresh project
+1. Download and configure PATH to the Android SDK
 
-When you're ready, run:
+   - Ensure `platform-tools` folder is added to the system PATH, and that the `ANDROID_HOME` variable points to the `Android/Sdk` folder. 
+   - Detailed instructions and help can be found on the [React Native docs](https://reactnative.dev/docs/set-up-your-environment?platform=android). 
 
-```bash
-npm run reset-project
-```
+2. Install dependencies
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+   ```bash
+   npm install
+   ```
 
-## Learn more
+3. Connect your android device via USB cable to your computer, or boot up an Android virtual device. 
 
-To learn more about developing your project with Expo, look at the following resources:
+   - Physical devices connected should have *USB Debugging* option enabled in **Developer Settings**. 
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+   - Verify your device is actively connected and recognized by running: 
+   
+   ```bash
+   adb devices
+   ```
 
-## Join the community
+4. Build and Run the application
 
-Join our community of developers creating universal apps.
+   Run the following command to boot the application on the device and configure the `android` build folder:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+   ```bash
+   npx expo run:android
+   ```
+
+5. Build a release APK file to install onto your device 
+
+   ```bash
+   cd android
+   ./gradlew assembleRelease
+   ```
+
+   - This generates an APK file at `android/app/build/outputs/apk/release/app-release.apk` that can be installed on your physical device. 
+   - This application functions like any other, meaning you do not need to be plugged into your computer to run the app. 
