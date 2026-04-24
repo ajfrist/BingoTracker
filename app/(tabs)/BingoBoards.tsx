@@ -34,6 +34,8 @@ export default function BingoBoards() {
     const [showAllCalled, setShowAllCalled] = useState(false);
     // Input state for entering called numbers
     const [input, setInput] = useState('');
+    // Toggle for compressed card view in list
+    const [compressedCardView, setCompressedCardView] = useState(false);
     // Indexes of cards being tracked 
     const [trackedCards, setTrackedCards] = useState<number[]>([]); // Indexes of cards being tracked
     // Cards state of currently marked cells this game, as bitmask (25 bit ints for 5x5 grid) 
@@ -433,11 +435,26 @@ export default function BingoBoards() {
                         }}
                         onPress={() => setShowAllCalled(v => !v)}
                     >
-                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>{showAllCalled ? '^' : 'v'}</Text>
+                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>{showAllCalled ? '▲' : '▼'}</Text>
                     </TouchableOpacity>
                 </View>
             </View>
             <View style={{ flex: 1, width: '100%' }}>
+                {/* Toggle button for compressedCardView */}
+                <TouchableOpacity
+                    style={{
+                        alignSelf: 'center',
+                        marginVertical: 10,
+                        paddingHorizontal: 20,
+                        paddingVertical: 6,
+                        borderRadius: 6,
+                        backgroundColor: '#9b9b9b',
+                    }}
+                    onPress={() => setCompressedCardView(v => !v)}
+                >
+                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18, margin: -5, width: "100%", }}>{compressedCardView ? '▼                      Expand                      ▼' : '▲                    Compress                    ▲'}</Text>
+                    
+                </TouchableOpacity>
                 {savedCards.length === 0 ? (
                     <Text style={{ textAlign: 'center', color: '#888', marginTop: 32 }}>No boards saved.</Text>
                 ) : (
@@ -448,7 +465,7 @@ export default function BingoBoards() {
                         contentContainerStyle={{ paddingBottom: 16, alignItems: 'center' }}
                         showsVerticalScrollIndicator={true}
                         renderItem={({ item: card, index: idx }) => (
-                            <View style={[bingoStyles.cardContainer, { backgroundColor: cardColors[idx] || '#f9f9f9' }] }>
+                            <View style={[bingoStyles.cardContainer, { backgroundColor: cardColors[idx] || '#f9f9f9', marginBottom: compressedCardView ? -100 : 3 }] }>
                                 <TouchableOpacity style={{ width: '100%', height: '100%', flex: 1 }} onPress={() => handleZoomCard(idx)} activeOpacity={0.8}>
                                     <Text style={{ fontWeight: 'bold', marginBottom: 1 }}>Card {idx + 1}   -   {winProgress[idx]} left</Text>
                                     {card.map((row, rowIdx) => (
