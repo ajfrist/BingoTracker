@@ -5,7 +5,7 @@ import { Camera, CameraView } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Easing, Platform, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
+import { Animated, Dimensions, Easing, Image, Platform, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
 
 // Only use tesseract.js for web OCR. For mobile, use react-native-ml-kit/text-recognition.
 const isWeb = Platform.OS === 'web';
@@ -29,6 +29,12 @@ export default function SetupNewGameScreen() {
   // OCR state
   const [ocrText, setOcrText] = useState<string>('No OCR results yet.');
   const [ocrLoading, setOcrLoading] = useState(false);
+
+  // Toggle: grid OCR vs full-image OCR
+  const [gridMode, setGridMode] = useState(true);
+
+  // Last captured image (data URI on web or file URI on mobile)
+  const [capturedImageUri, setCapturedImageUri] = useState<string | null>(null);
 
   // Table state for OCR results (5x5 grid)
   const initialTable = Array.from({ length: 5 }, (_, r) =>
@@ -89,6 +95,149 @@ export default function SetupNewGameScreen() {
     setTableData(initialTable);
   };
 
+  // Parse raw string from whole image OCR into 5x5 cell output - backtracking
+  const parseFullOCR = (raw: string, cellIndex = 0, latestBColumn: number | null = null): number[] | null => {
+    
+    // Remove Free space & numbers inside of that cell; all new-lines; replace '|', '\\', or '/' with space; remove all text 
+    let cleaned = raw.replace(/\n/g, ' ').replace(/\|/g, ' ').replace(/\\/g, ' ').replace(/\//g, ' ').replace(/[^\d\s]/g, '').trim();
+    if (cleaned.length == 0){ 
+        return null; 
+        // return Array(25 - cellIndex).fill(-1);
+    }
+
+    // Handle free space
+    if (cellIndex == 12){ 
+        let followingVals = parseFullOCR(cleaned, cellIndex + 1, latestBColumn);
+
+        if (followingVals != null){
+            return [0, ...followingVals]; // Good case: found a match, success!
+        } 
+        else {
+            return null;
+            // return Array(25 - cellIndex).fill(-2);
+        }
+    }
+
+    // first column, could be next 1 or 2 characters, must be 1-15
+    if (cellIndex % 5 == 0){ // B column
+        let currentValInt;
+        
+        if ((/^(1[0-5])$/.test(cleaned.substring(0, 2)))){ // check for 2 characters width numbers
+            currentValInt = Number(cleaned.substring(0, 2));
+            if (!isNaN(currentValInt)){
+                let followingVals = parseFullOCR(cleaned.substring(2), cellIndex + 1, currentValInt);
+
+                if (followingVals != null){
+                    return [currentValInt, ...followingVals]; // Good case: found a match, success!
+                } 
+
+                // Verify that not happening to match the previous column B value (scan read same value twice)
+                if (latestBColumn == currentValInt){   
+                    // skip to next valid value
+                    let followingVals = parseFullOCR(cleaned.substring(2), cellIndex, latestBColumn);
+
+                    if (followingVals != null){
+                        return followingVals; // Good case: found a match, success!
+                    }
+                }
+            }
+        }
+
+
+        if ((/^([1-9])$/.test(cleaned.substring(0, 1)))){ // check for 1 character width numbers
+            currentValInt = Number(cleaned.substring(0, 1));
+            if (!isNaN(currentValInt)){
+                let followingVals = parseFullOCR(cleaned.substring(1), cellIndex + 1, currentValInt);
+
+                if (followingVals != null){
+                    return [currentValInt, ...followingVals]; // Good case: found a match, success!
+                } 
+
+                // Verify that not happening to match the previous column B value (scan read same value twice)
+                if (latestBColumn == currentValInt){   
+                    // skip to next valid value
+                    let followingVals = parseFullOCR(cleaned.substring(1), cellIndex, latestBColumn);
+
+                    if (followingVals != null){
+                        return followingVals; // Good case: found a match, success!
+                    }
+                }
+            }
+        }
+
+        return null; // Exhausted all possibilities at this depth: signal dead-end
+        // return Array(25 - cellIndex).fill(-4);
+    } 
+    else {  // other columns, only 2 characters wide
+
+        // First check double OCR reading from the B column within the same line
+        if (latestBColumn != null && cellIndex % 5 == 1){ // If in I column, verify not matching previous B column value (scan read same value twice)
+            // skip to next valid value
+            if (latestBColumn < 10 && latestBColumn == Number(cleaned.substring(0, 1))){
+                let followingVals = parseFullOCR(cleaned.substring(1), cellIndex, latestBColumn);
+
+                if (followingVals != null){
+                    return followingVals; // Good case: found a match, success!
+                }
+            }
+            else if (latestBColumn >= 10 && latestBColumn == Number(cleaned.substring(0, 2))){
+                let followingVals = parseFullOCR(cleaned.substring(2), cellIndex, latestBColumn);
+
+                if (followingVals != null){
+                    return followingVals; // Good case: found a match, success!
+                }
+            }
+        }
+
+        // Check if the next 2 characters would work
+        let currentVal = cleaned.substring(0, 2);      
+        if ((cellIndex % 5 == 1 && (/^(1[6-9]|2[0-9]|30)$/.test(currentVal))) || //I column
+            (cellIndex % 5 == 2 && (/^(3[1-9]|4[0-5])$/.test(currentVal))) ||   // N column
+            (cellIndex % 5 == 3 && (/^(4[6-9]|5[0-9]|60)$/.test(currentVal))) || // G column
+            (cellIndex % 5 == 4 && (/^(6[1-9]|7[0-5])$/.test(currentVal)))       // O column
+        ) { 
+
+            let currentValInt = Number(cleaned.substring(0, 2));
+            if (!isNaN(currentValInt)){
+                if (cellIndex < 24){
+                    let followingVals = parseFullOCR(cleaned.substring(2), cellIndex + 1, latestBColumn);
+
+                    if (followingVals != null){
+                        return [currentValInt, ...followingVals]; // Good case: found a match, success!
+                    }
+                }
+                else { 
+                    return [currentValInt]; // Bottom-most case; would indicate overall completion & success!
+                }
+            }
+        }
+
+        return null; // Exhausted all possibilities at this depth: signal dead-end
+        
+        // Return an array of -1s of size of remaining cells = 25-cellIndex
+        // return Array(25 - cellIndex).fill(-5); // Signal that we are in a valid path, but cannot be sure of the remaining values (due to scan quality); will be treated as "unknown" in the final board generation
+        
+        // let followingVals = parseFullOCR(cleaned.substring(1), cellIndex + 1, latestBColumn, debug);
+        // if (followingVals != null){
+        //     return [Number(cleaned.substring(0, 1)), ...followingVals]; // Good case: found a match, success!
+        // }
+        // followingVals = parseFullOCR(cleaned.substring(2), cellIndex + 1, latestBColumn, debug);
+        // if (followingVals != null){
+        //     return [Number(cleaned.substring(0, 2)), ...followingVals]; // Good case: found a match, success!
+        // }
+        // followingVals = parseFullOCR(cleaned.substring(3), cellIndex + 1, latestBColumn, debug);
+        // if (followingVals != null){
+        //     return [Number(cleaned.substring(0, 3)), ...followingVals]; // Good case: found a match, success!
+        // }
+        // followingVals = parseFullOCR(cleaned.substring(4), cellIndex + 1, latestBColumn, debug);
+        // if (followingVals != null){
+        //     return [Number(cleaned.substring(0, 4)), ...followingVals]; // Good case: found a match, success!
+        // }
+
+    
+    }
+  };
+
   useEffect(() => {
     if (Platform.OS === 'web') {
       // Web: Use HTML5 video
@@ -126,110 +275,164 @@ export default function SetupNewGameScreen() {
     setOcrLoading(true);
     try {
       if (Platform.OS === 'web' && hasPermission && videoRef.current && createWorker) {
-        // Web OCR logic
+        // Web: capture current video frame to canvas
         const canvas = document.createElement('canvas');
         canvas.width = videoRef.current.videoWidth;
         canvas.height = videoRef.current.videoHeight;
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-          const gridRows = 5;
-          const gridCols = 5;
-          const cellWidth = canvas.width / gridCols;
-          const cellHeight = canvas.height / gridRows;
-          const worker = await createWorker('eng', 1, { logger: (m: any) => console.log(m) });
-          await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_CHAR });
-          const results: string[][] = [];
-          for (let row = 0; row < gridRows; row++) {
-            const rowResults: string[] = [];
-            for (let col = 0; col < gridCols; col++) {
-              if (row === 2 && col === 2) {
-                rowResults.push('Free');
-                continue;
-              }
-              const cellCanvas = document.createElement('canvas');
-              cellCanvas.width = cellWidth;
-              cellCanvas.height = cellHeight;
-              const cellCtx = cellCanvas.getContext('2d');
-              if (cellCtx) {
-                cellCtx.drawImage(
-                  canvas,
-                  col * cellWidth, row * cellHeight, cellWidth, cellHeight,
-                  0, 0, cellWidth, cellHeight
+          const dataUrl = canvas.toDataURL('image/png');
+          setCapturedImageUri(dataUrl);
+
+          if (!gridMode) {
+            // Full-image OCR (single pass)
+            const worker = await createWorker('eng', 1, { logger: (m: any) => console.log(m) });
+            await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
+            try {
+              const ret = await worker.recognize(dataUrl, { tessedit_char_whitelist: '0123456789 ' });
+              const raw = ret.data.text.trim() || '';
+              setOcrText(raw);
+              // Try to parse the raw OCR into 25 cell values
+              const parsed = parseFullOCR(raw, 0, null);
+              if (parsed && parsed.length >= 25) {
+                const newTable = Array.from({ length: 5 }, (_, r) =>
+                  Array.from({ length: 5 }, (_, c) => (r === 2 && c === 2 ? 'Free' : String(parsed[r * 5 + c] || '')))
                 );
-                const cellDataUrl = cellCanvas.toDataURL('image/png');
-                try {
-                  const ret = await worker.recognize(cellDataUrl, { tessedit_char_whitelist: '0123456789' });
-                  rowResults.push(ret.data.text.trim() || '');
-                } catch {
+                setTableData(newTable);
+              } else {
+                setTableData(initialTable);
+              }
+            } catch {
+              setOcrText('');
+              setTableData(initialTable);
+            }
+            await worker.terminate();
+          } else {
+            // Grid OCR: split into 5x5
+            const gridRows = 5;
+            const gridCols = 5;
+            const cellWidth = canvas.width / gridCols;
+            const cellHeight = canvas.height / gridRows;
+            const worker = await createWorker('eng', 1, { logger: (m: any) => console.log(m) });
+            await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_CHAR });
+            const results: string[][] = [];
+            for (let row = 0; row < gridRows; row++) {
+              const rowResults: string[] = [];
+              for (let col = 0; col < gridCols; col++) {
+                if (row === 2 && col === 2) {
+                  rowResults.push('Free');
+                  continue;
+                }
+                const cellCanvas = document.createElement('canvas');
+                cellCanvas.width = cellWidth;
+                cellCanvas.height = cellHeight;
+                const cellCtx = cellCanvas.getContext('2d');
+                if (cellCtx) {
+                  cellCtx.drawImage(
+                    canvas,
+                    col * cellWidth, row * cellHeight, cellWidth, cellHeight,
+                    0, 0, cellWidth, cellHeight
+                  );
+                  const cellDataUrl = cellCanvas.toDataURL('image/png');
+                  try {
+                    const ret = await worker.recognize(cellDataUrl, { tessedit_char_whitelist: '0123456789' });
+                    rowResults.push(ret.data.text.trim() || '');
+                  } catch {
+                    rowResults.push('');
+                  }
+                } else {
                   rowResults.push('');
                 }
-              } else {
-                rowResults.push('');
               }
+              results.push(rowResults);
             }
-            results.push(rowResults);
+            await worker.terminate();
+            setTableData(results);
+            setOcrText(results.map(row => row.join(' | ')).join('\n'));
           }
-          await worker.terminate();
-          setTableData(results);
-          setOcrText(results.map(row => row.join(' | ')).join('\n'));
         }
       } else if (!isWeb && hasPermission && cameraReady && cameraRef.current) {
-        // Mobile OCR logic
+        // Mobile: take picture
         // @ts-ignore
-        const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.5, skipProcessing: true, animateShutter: false });
+        const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.7, skipProcessing: true, animateShutter: false });
         if (photo && photo.uri) {
-          // Get image dimensions
-          const { width: imgWidth, height: imgHeight } = photo;
-          const gridRows = 5;
-          const gridCols = 5;
-          const cellWidth = imgWidth / gridCols;
-          const cellHeight = imgHeight / gridRows;
-          const tilePromises: Promise<{ row: number; col: number; text: string }>[][] = [];
-          for (let row = 0; row < gridRows; row++) {
-            const rowPromises: Promise<{ row: number; col: number; text: string }>[] = [];
-            for (let col = 0; col < gridCols; col++) {
-              if (row === 2 && col === 2) {
-                rowPromises.push(Promise.resolve({ row, col, text: 'Free' }));
-                continue;
+          setCapturedImageUri(photo.uri);
+          // If full-image mode, run recognition once on the whole photo
+          if (!gridMode) {
+            try {
+              const fullResult = await textRecognition.recognize(photo.uri, TextRecognitionScript.LATIN);
+              const fullText = fullResult.blocks.map((block: any) => block.text).join(' ').trim();
+              const raw = fullText || '';
+              setOcrText(raw);
+              // Attempt to parse the full-image OCR into table cells
+              const parsed = parseFullOCR(raw, 0, null);
+              if (parsed && parsed.length >= 25) {
+                const newTable = Array.from({ length: 5 }, (_, r) =>
+                  Array.from({ length: 5 }, (_, c) => (r === 2 && c === 2 ? 'Free' : String(parsed[r * 5 + c] || '')))
+                );
+                setTableData(newTable);
+              } else {
+                setTableData(initialTable);
               }
-              const crop = {
-                originX: Math.round(col * cellWidth),
-                originY: Math.round(row * cellHeight),
-                width: Math.round(cellWidth),
-                height: Math.round(cellHeight),
-              };
-              rowPromises.push(
-                (async () => {
-                  try {
-                    const tile = await ImageManipulator.manipulateAsync(
-                      photo.uri,
-                      [{ crop }],
-                      { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
-                    );
-                    const tileResult = await textRecognition.recognize(tile.uri, TextRecognitionScript.LATIN);
-                    const tileText = tileResult.blocks.map((block: any) => block.text).join(' ').trim();
-                    return { row, col, text: tileText };
-                  } catch {
-                    return { row, col, text: '' };
-                  }
-                })()
-              );
+              
+            } catch {
+              setOcrText('');
+              setTableData(initialTable);
             }
-            tilePromises.push(rowPromises);
-          }
-          const results: string[][] = [];
-          await Promise.all(
-            tilePromises.map(rowPromises =>
-              Promise.all(rowPromises).then(rowResults => rowResults.map(r => r.text))
-            )
-          ).then(allRows => {
-            allRows.forEach((rowResults, rowIdx) => {
-              results[rowIdx] = rowResults;
+          } else {
+            // Grid mode: crop into tiles and run recognition per tile (existing behavior)
+            const { width: imgWidth, height: imgHeight } = photo;
+            const gridRows = 5;
+            const gridCols = 5;
+            const cellWidth = imgWidth / gridCols;
+            const cellHeight = imgHeight / gridRows;
+            const tilePromises: Promise<{ row: number; col: number; text: string }>[][] = [];
+            for (let row = 0; row < gridRows; row++) {
+              const rowPromises: Promise<{ row: number; col: number; text: string }>[] = [];
+              for (let col = 0; col < gridCols; col++) {
+                if (row === 2 && col === 2) {
+                  rowPromises.push(Promise.resolve({ row, col, text: 'Free' }));
+                  continue;
+                }
+                const crop = {
+                  originX: Math.round(col * cellWidth),
+                  originY: Math.round(row * cellHeight),
+                  width: Math.round(cellWidth),
+                  height: Math.round(cellHeight),
+                };
+                rowPromises.push(
+                  (async () => {
+                    try {
+                      const tile = await ImageManipulator.manipulateAsync(
+                        photo.uri,
+                        [{ crop }],
+                        { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
+                      );
+                      const tileResult = await textRecognition.recognize(tile.uri, TextRecognitionScript.LATIN);
+                      const tileText = tileResult.blocks.map((block: any) => block.text).join(' ').trim();
+                      return { row, col, text: tileText };
+                    } catch {
+                      return { row, col, text: '' };
+                    }
+                  })()
+                );
+              }
+              tilePromises.push(rowPromises);
+            }
+            const results: string[][] = [];
+            await Promise.all(
+              tilePromises.map(rowPromises =>
+                Promise.all(rowPromises).then(rowResults => rowResults.map(r => r.text))
+              )
+            ).then(allRows => {
+              allRows.forEach((rowResults, rowIdx) => {
+                results[rowIdx] = rowResults;
+              });
             });
-          });
-          setTableData(results);
-          setOcrText(results.map(row => row.join(' | ')).join('\n'));
+            setTableData(results);
+            setOcrText(results.map(row => row.join(' | ')).join('\n'));
+          }
         }
       }
     } catch (e) {
@@ -325,6 +528,7 @@ export default function SetupNewGameScreen() {
   return (
 
       <View style={styles.container}>
+        <ScrollView contentContainerStyle={{ alignItems: 'center', paddingBottom: 40 }} style={{ width: '100%' }} showsVerticalScrollIndicator={false}>
         <View style={{ width: '100%', alignItems: 'center', marginBottom: 12 }}>
           <Text style={{ fontSize: 24, fontWeight: 'bold', letterSpacing: 1 }}>
             Scan Your Cards
@@ -434,10 +638,37 @@ export default function SetupNewGameScreen() {
           />
         </View>
 
-        <View style={[styles.buttonRow, { margin: 7, maxWidth: 200 }]}>
+        <View style={[styles.buttonRow, { margin: 7, maxWidth: 320 }]}> 
+          <TouchableOpacity
+            style={[styles.button, { maxWidth: 120, flex: 0 }]}
+            onPress={() => setGridMode(prev => !prev)}
+          >
+            <Text style={styles.buttonText}>{gridMode ? 'Grid: On' : 'Grid: Off'}</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.button} onPress={handleScan} disabled={ocrLoading}>
             <Text style={styles.buttonText}>{ocrLoading ? 'Scanning...' : 'Scan'}</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Preview of captured image and raw OCR text for debugging */}
+        <View style={{ width: cameraSize, marginTop: 8, alignItems: 'center' }}>
+          {capturedImageUri ? (
+            <Image
+              source={{ uri: capturedImageUri }}
+              style={{ width: cameraSize, height: Math.round(cameraSize * 0.5), borderRadius: 8, backgroundColor: '#000' }}
+              resizeMode="contain"
+            />
+          ) : (
+            <View style={{ width: cameraSize, height: Math.round(cameraSize * 0.5), borderRadius: 8, backgroundColor: '#111', justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: '#ddd' }}>No captured image</Text>
+            </View>
+          )}
+          <View style={{ width: cameraSize, marginTop: 8, maxHeight: 160 }}>
+            <Text style={{ fontWeight: 'bold', marginBottom: 6 }}>OCR Debug Output</Text>
+            <ScrollView style={{ backgroundColor: '#f7f7f7', padding: 8, borderRadius: 8 }}>
+              <Text selectable>{ocrLoading ? 'Processing...' : ocrText}</Text>
+            </ScrollView>
+          </View>
         </View>
         
         <View style={{ width: cameraSize }}>
@@ -504,6 +735,7 @@ export default function SetupNewGameScreen() {
           </TouchableOpacity>
         </View>
         {/* <Text style={styles.statusText}>OCR Result: {ocrLoading ? 'Processing...' : ocrText}</Text> */}
+        </ScrollView>
       </View>
   );
 }
