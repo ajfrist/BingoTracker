@@ -35,6 +35,8 @@ export default function SetupNewGameScreen() {
 
   // Last captured image (data URI on web or file URI on mobile)
   const [capturedImageUri, setCapturedImageUri] = useState<string | null>(null);
+  // Show/hide the captured image preview and OCR debug output
+  const [showDebug, setShowDebug] = useState(true);
 
   // Table state for OCR results (5x5 grid)
   const initialTable = Array.from({ length: 5 }, (_, r) =>
@@ -529,212 +531,198 @@ export default function SetupNewGameScreen() {
 
       <View style={styles.container}>
         <ScrollView contentContainerStyle={{ alignItems: 'center', paddingBottom: 40 }} style={{ width: '100%' }} showsVerticalScrollIndicator={false}>
-        <View style={{ width: '100%', alignItems: 'center', marginBottom: 12 }}>
-          <Text style={{ fontSize: 24, fontWeight: 'bold', letterSpacing: 1 }}>
-            Scan Your Cards
-          </Text>
-        </View>
-        <View style={[styles.cameraContainer, { width: cameraSize, height: cameraSize }]}> 
-          {/* Corner guides overlay */}
-          <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cornerOverlay]}>
-            {/* Top Left */}
-            <Animated.View style={[
-              styles.corner,
-              {
-                top: cornerOffset,
-                left: cornerOffset,
-              },
-              styles.cornerTL,
-            ]} />
-            {/* Top Right */}
-            <Animated.View style={[
-              styles.corner,
-              {
-                top: cornerOffset,
-                right: cornerOffset,
-              },
-              styles.cornerTR,
-            ]} />
-            {/* Bottom Left */}
-            <Animated.View style={[
-              styles.corner,
-              {
-                bottom: cornerOffset,
-                left: cornerOffset,
-              },
-              styles.cornerBL,
-            ]} />
-            {/* Bottom Right */}
-            <Animated.View style={[
-              styles.corner,
-              {
-                bottom: cornerOffset,
-                right: cornerOffset,
-              },
-              styles.cornerBR,
-            ]} />
+          <View style={{ width: '100%', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={{ fontSize: 24, fontWeight: 'bold', letterSpacing: 1 }}>
+              Scan Your Cards
+            </Text>
           </View>
-          {/* 6x5 Grid Overlay */}
-          <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.gridOverlay]}>
-            {/* Horizontal lines (6 for 5 rows) */}
-            {Array.from({ length: 6 }).map((_, i) => (
-              <View
-                key={`hline-${i}`}
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  top: `${(i * 20)}%`,
-                  height: 1,
-                  backgroundColor: 'rgba(255,255,255,0.7)',
-                }}
-              />
-            ))}
-            {/* Vertical lines (5 for 4 columns) */}
-            {Array.from({ length: 5 }).map((_, i) => (
-              <View
-                key={`vline-${i}`}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  bottom: 0,
-                  left: `${(i * 20)}%`,
-                  width: 1,
-                  backgroundColor: 'rgba(255,255,255,0.7)',
-                }}
-              />
-            ))}
+          <View style={{ width: '100%', justifyContent: 'center', alignItems: 'center' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+              {/* Left column for Grid + Info buttons */}
+              <View style={{ width: 60, alignItems: 'center', margin: 5, marginRight: 12, }}>
+                <TouchableOpacity
+                  style={[styles.smallButton, gridMode ? { backgroundColor: '#1565c0' } : null, { maxWidth: 45 }, { paddingHorizontal: 4 }, { alignSelf: 'auto' }]}
+                  onPress={() => setGridMode(prev => !prev)}
+                >
+                  <Text style={[styles.buttonText, { textAlign: 'center' }]}>{gridMode ? 'Grid: On' : 'Grid: Off'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.smallButton, { marginTop: 8, maxWidth: 45 }, { paddingHorizontal: 4 }]}
+                  onPress={() => setShowDebug(prev => !prev)}
+                >
+                  <Text style={[styles.buttonText, { textAlign: 'center' }]}>Info</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={[styles.cameraContainer, { width: cameraSize, height: cameraSize }]}> 
+                {/* 6x5 Grid Overlay (visible only when gridMode enabled) */}
+                {gridMode && (
+                  <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.gridOverlay]}>
+                    {/* Horizontal lines (6 for 5 rows) */}
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <View
+                        key={`hline-${i}`}
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          right: 0,
+                          top: `${(i * 20)}%`,
+                          height: 1,
+                          backgroundColor: 'rgba(255,255,255,0.7)',
+                        }}
+                      />
+                    ))}
+                    {/* Vertical lines (5 for 4 columns) */}
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <View
+                        key={`vline-${i}`}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          bottom: 0,
+                          left: `${(i * 20)}%`,
+                          width: 1,
+                          backgroundColor: 'rgba(255,255,255,0.7)',
+                        }}
+                      />
+                    ))}
+                  </View>
+                )}
+                
+                {hasPermission === null ? (
+                  <Text style={styles.statusText}>Requesting camera permission...</Text>
+                ) : hasPermission === false ? (
+                  <Text style={styles.statusText}>Camera permission denied. Please enable camera access in your device settings.</Text>
+                ) : Platform.OS === 'web' ? (
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{ width: '100%', height: '100%', borderRadius: 12, background: '#222' }}
+                  />
+                ) : (
+                  <>
+                    {!cameraReady && (
+                      <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', zIndex: 2, backgroundColor: 'rgba(0,0,0,0.2)' }]}> 
+                        <Text style={styles.statusText}>Starting camera...</Text>
+                      </View>
+                    )}
+                    
+                  </>
+                )}
+                <CameraView
+                  ref={cameraRef}
+                  style={styles.camera}
+                  facing={'back'}
+                  onCameraReady={() => setCameraReady(true)}
+                  ratio="1:1"
+                  animateShutter={false}
+                  zoom={0.2}
+                />
+
+              </View>
+
+              {/* Right column for balancing, ensure camera stays centered */}
+              <View style={{ width: 60, alignItems: 'center', margin: 5, marginLeft: 12 }}></View>
+            </View>
           </View>
-          {hasPermission === null ? (
-            <Text style={styles.statusText}>Requesting camera permission...</Text>
-          ) : hasPermission === false ? (
-            <Text style={styles.statusText}>Camera permission denied. Please enable camera access in your device settings.</Text>
-          ) : Platform.OS === 'web' ? (
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              style={{ width: '100%', height: '100%', borderRadius: 12, background: '#222' }}
-            />
-          ) : (
-            <>
-              {!cameraReady && (
-                <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', zIndex: 2, backgroundColor: 'rgba(0,0,0,0.2)' }]}> 
-                  <Text style={styles.statusText}>Starting camera...</Text>
+
+          <View style={[styles.buttonRow, { margin: 7, maxWidth: 320 }]}> 
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity style={styles.button} onPress={handleScan} disabled={ocrLoading}>
+              <Text style={styles.buttonText}>{ocrLoading ? 'Scanning...' : 'Scan'}</Text>
+            </TouchableOpacity>
+            <View style={{ flex: 1 }} />
+          </View>
+
+          {/* Preview of captured image and raw OCR text for debugging (toggle via Info) */}
+          {showDebug && (
+            <View style={{ width: cameraSize, marginTop: 8, alignItems: 'center' }}>
+              {capturedImageUri ? (
+                <Image
+                  source={{ uri: capturedImageUri }}
+                  style={{ width: cameraSize, height: Math.round(cameraSize * 0.5), borderRadius: 8, backgroundColor: '#000' }}
+                  resizeMode="contain"
+                />
+              ) : (
+                <View style={{ width: cameraSize, height: Math.round(cameraSize * 0.5), borderRadius: 8, backgroundColor: '#111', justifyContent: 'center', alignItems: 'center' }}>
+                  <Text style={{ color: '#ddd' }}>No captured image</Text>
                 </View>
               )}
-              
-            </>
-          )}
-          <CameraView
-            ref={cameraRef}
-            style={styles.camera}
-            facing={'back'}
-            onCameraReady={() => setCameraReady(true)}
-            ratio="1:1"
-            animateShutter={false}
-            zoom={0.2}
-          />
-        </View>
-
-        <View style={[styles.buttonRow, { margin: 7, maxWidth: 320 }]}> 
-          <TouchableOpacity
-            style={[styles.button, { maxWidth: 120, flex: 0 }]}
-            onPress={() => setGridMode(prev => !prev)}
-          >
-            <Text style={styles.buttonText}>{gridMode ? 'Grid: On' : 'Grid: Off'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.button} onPress={handleScan} disabled={ocrLoading}>
-            <Text style={styles.buttonText}>{ocrLoading ? 'Scanning...' : 'Scan'}</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Preview of captured image and raw OCR text for debugging */}
-        <View style={{ width: cameraSize, marginTop: 8, alignItems: 'center' }}>
-          {capturedImageUri ? (
-            <Image
-              source={{ uri: capturedImageUri }}
-              style={{ width: cameraSize, height: Math.round(cameraSize * 0.5), borderRadius: 8, backgroundColor: '#000' }}
-              resizeMode="contain"
-            />
-          ) : (
-            <View style={{ width: cameraSize, height: Math.round(cameraSize * 0.5), borderRadius: 8, backgroundColor: '#111', justifyContent: 'center', alignItems: 'center' }}>
-              <Text style={{ color: '#ddd' }}>No captured image</Text>
+              <View style={{ width: cameraSize, marginTop: 8, maxHeight: 160 }}>
+                <Text style={{ fontWeight: 'bold', marginBottom: 6 }}>OCR Debug Output</Text>
+                <ScrollView style={{ backgroundColor: '#f7f7f7', padding: 8, borderRadius: 8 }}>
+                  <Text selectable>{ocrLoading ? 'Processing...' : ocrText}</Text>
+                </ScrollView>
+              </View>
             </View>
           )}
-          <View style={{ width: cameraSize, marginTop: 8, maxHeight: 160 }}>
-            <Text style={{ fontWeight: 'bold', marginBottom: 6 }}>OCR Debug Output</Text>
-            <ScrollView style={{ backgroundColor: '#f7f7f7', padding: 8, borderRadius: 8 }}>
-              <Text selectable>{ocrLoading ? 'Processing...' : ocrText}</Text>
-            </ScrollView>
-          </View>
-        </View>
-        
-        <View style={{ width: cameraSize }}>
-          <View style={styles.tableRow}>
-            {columns.map((col, idx) => (
-              <View key={col} style={styles.tableCellHeader}>
-                <Text style={styles.headerText}>{col}</Text>
+          
+          <View style={{ width: cameraSize }}>
+            <View style={styles.tableRow}>
+              {columns.map((col, idx) => (
+                <View key={col} style={styles.tableCellHeader}>
+                  <Text style={styles.headerText}>{col}</Text>
+                </View>
+              ))}
+            </View>
+            {/* Render 5 rows, each with 5 columns, showing OCR results and allowing manual entry */}
+            {rows.map((_, rowIdx) => (
+              <View key={rowIdx} style={styles.tableRow}>
+                {columns.map((_, colIdx) => {
+                  const cellValue = tableData[rowIdx][colIdx];
+                  const valid = isCellValid(colIdx, cellValue);
+                  const isCenter = rowIdx === 2 && colIdx === 2;
+                  const isDuplicate = duplicatePositions.has(`${rowIdx},${colIdx}`);
+                  return (
+                    <View
+                      key={colIdx}
+                      style={[
+                        styles.tableCell,
+                        !valid && !isCenter && styles.tableCellInvalid,
+                        isCenter && { backgroundColor: '#e0ffe0', borderColor: '#388e3c' },
+                        isDuplicate && !isCenter && styles.tableCellDuplicate,
+                      ]}
+                    >
+                      {isCenter ? (
+                        <Text style={{ fontSize: 13, textAlign: 'center', fontWeight: 'bold', color: '#388e3c' }}>Free</Text>
+                      ) : (
+                        <TextInput
+                          style={{ fontSize: 13, textAlign: 'center', padding: 0 }}
+                          value={cellValue}
+                          onChangeText={text => insertTextToTable(rowIdx, colIdx, text)}
+                          maxLength={2}
+                          autoCorrect={false}
+                          autoCapitalize="characters"
+                          keyboardType='numeric'
+                        />
+                      )}
+                    </View>
+                  );
+                })}
               </View>
             ))}
           </View>
-          {/* Render 5 rows, each with 5 columns, showing OCR results and allowing manual entry */}
-          {rows.map((_, rowIdx) => (
-            <View key={rowIdx} style={styles.tableRow}>
-              {columns.map((_, colIdx) => {
-                const cellValue = tableData[rowIdx][colIdx];
-                const valid = isCellValid(colIdx, cellValue);
-                const isCenter = rowIdx === 2 && colIdx === 2;
-                const isDuplicate = duplicatePositions.has(`${rowIdx},${colIdx}`);
-                return (
-                  <View
-                    key={colIdx}
-                    style={[
-                      styles.tableCell,
-                      !valid && !isCenter && styles.tableCellInvalid,
-                      isCenter && { backgroundColor: '#e0ffe0', borderColor: '#388e3c' },
-                      isDuplicate && !isCenter && styles.tableCellDuplicate,
-                    ]}
-                  >
-                    {isCenter ? (
-                      <Text style={{ fontSize: 13, textAlign: 'center', fontWeight: 'bold', color: '#388e3c' }}>Free</Text>
-                    ) : (
-                      <TextInput
-                        style={{ fontSize: 13, textAlign: 'center', padding: 0 }}
-                        value={cellValue}
-                        onChangeText={text => insertTextToTable(rowIdx, colIdx, text)}
-                        maxLength={2}
-                        autoCorrect={false}
-                        autoCapitalize="characters"
-                        keyboardType='numeric'
-                      />
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-          ))}
-        </View>
-        <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.button} onPress={saveCurrentCard}>
-            <Text style={styles.buttonText}>Save Card</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.button} onPress={() => savedCards.length===0 ? ToastAndroid.show('No cards saved!', ToastAndroid.SHORT) : router.push({ pathname: '/(tabs)/BingoBoards', params: { cardsJSON: JSON.stringify(savedCards) } })} >
-            <Text style={styles.buttonText}>Start BINGO</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={{ width: '100%', alignItems: 'center', margin: 16 }}>
-          <Text style={{ fontSize: 18, fontWeight: 'bold', letterSpacing: 1 }}>
-            Cards Saved: {savedCards.length}
-          </Text>
-        </View>
-        <View style={styles.buttonRow}>
-          <TouchableOpacity style={[styles.button, { backgroundColor: '#d32f2f' }]} onPress={handleRemoveAllCards}>
-            <Text style={styles.buttonText}>Remove All Cards</Text>
-          </TouchableOpacity>
-        </View>
-        {/* <Text style={styles.statusText}>OCR Result: {ocrLoading ? 'Processing...' : ocrText}</Text> */}
+          <View style={styles.buttonRow}>
+            <TouchableOpacity style={styles.button} onPress={saveCurrentCard}>
+              <Text style={styles.buttonText}>Save Card</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.button} onPress={() => savedCards.length===0 ? ToastAndroid.show('No cards saved!', ToastAndroid.SHORT) : router.push({ pathname: '/(tabs)/BingoBoards', params: { cardsJSON: JSON.stringify(savedCards) } })} >
+              <Text style={styles.buttonText}>Start BINGO</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={{ width: '100%', alignItems: 'center', margin: 16 }}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', letterSpacing: 1 }}>
+              Cards Saved: {savedCards.length}
+            </Text>
+          </View>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity style={[styles.button, { backgroundColor: '#d32f2f' }]} onPress={handleRemoveAllCards}>
+              <Text style={styles.buttonText}>Remove All Cards</Text>
+            </TouchableOpacity>
+          </View>
+          {/* <Text style={styles.statusText}>OCR Result: {ocrLoading ? 'Processing...' : ocrText}</Text> */}
         </ScrollView>
       </View>
   );
@@ -803,6 +791,13 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
     marginHorizontal: 2,
+  },
+  smallButton: {
+    width: 64,
+    backgroundColor: '#1976d2',
+    paddingVertical: 8,
+    borderRadius: 6,
+    alignItems: 'center',
   },
   buttonText: {
     color: '#fff',
