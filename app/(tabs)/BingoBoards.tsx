@@ -33,7 +33,15 @@ export default function BingoBoards() {
     // Toggle to show all called numbers or just the last 5
     const [showAllCalled, setShowAllCalled] = useState(false);
     // Input state for entering called numbers
-    const [input, setInput] = useState('');
+    const inputValueRef = useRef(''); // used for grabbing the text value
+    const inputRef = useRef<TextInput>(null); // used for (re)seting the text value
+    const clearInput = () => {
+        inputRef.current?.clear();
+    };
+    const updateValue = () => {
+        // Set the value to "New Value" using setNativeProps
+        inputRef.current?.setNativeProps({ text: 'New Value' });
+    };
     // Toggle for compressed card view in list
     const [compressedCardView, setCompressedCardView] = useState(false);
     // Indexes of cards being tracked 
@@ -84,6 +92,7 @@ export default function BingoBoards() {
     const handleSubmit = () => {
         // Only allow numbers 1-75 (character sensitive)
         const regex = /^(?:[1-9]|[1-6][0-9]|7[0-5])$/;
+        const input = inputValueRef.current.trim();
         if (!regex.test(input)) {
             Alert.alert('Invalid Input', 'Please enter a number from 1 to 75.');
             return;
@@ -96,7 +105,8 @@ export default function BingoBoards() {
 
         setCalled(input);
         setAllCalled(prev => [...prev, input]);
-        setInput('');
+        inputValueRef.current = '';
+        clearInput();
     };
 
     const handleClear = () => {
@@ -372,9 +382,12 @@ export default function BingoBoards() {
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10, marginTop: 8, paddingLeft: 40 }}>
                 <Text style={{ fontSize: 18, fontWeight: 'bold' }}>Called: </Text>
                 <TextInput
-                    style={{ borderWidth: 1, borderColor: '#bbb', borderRadius: 6, padding: 6, minWidth: 80, marginRight: 8 }}
-                    value={input}
-                    onChangeText={setInput}
+                    style={{ borderWidth: 1, borderColor: '#bbb', color: '#000', borderRadius: 6, padding: 6, minWidth: 80, marginRight: 8 }}
+                    ref={inputRef}
+                    defaultValue={inputValueRef.current}
+                    onChangeText={(text) => {
+                        inputValueRef.current = text; // Update the ref's current property directly
+                    }}
                     placeholder=""
                     keyboardType='numeric'
                     onSubmitEditing={handleSubmit}
