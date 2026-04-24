@@ -31,12 +31,12 @@ export default function SetupNewGameScreen() {
   const [ocrLoading, setOcrLoading] = useState(false);
 
   // Toggle: grid OCR vs full-image OCR
-  const [gridMode, setGridMode] = useState(true);
+  const [gridMode, setGridMode] = useState(false);
 
   // Last captured image (data URI on web or file URI on mobile)
   const [capturedImageUri, setCapturedImageUri] = useState<string | null>(null);
   // Show/hide the captured image preview and OCR debug output
-  const [showDebug, setShowDebug] = useState(true);
+  const [showDebug, setShowDebug] = useState(false);
 
   // Table state for OCR results (5x5 grid)
   const initialTable = Array.from({ length: 5 }, (_, r) =>
