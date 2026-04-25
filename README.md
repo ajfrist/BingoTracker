@@ -32,8 +32,8 @@
 1. Clone the repo and open it:
 
    ```bash
-   git clone <repo-url>
-   cd bingo_track_init
+   git clone https://github.com/ajfrist/BingoTracker
+   cd BingoTracker
    ```
 
 2. Install JS dependencies (choose one):
