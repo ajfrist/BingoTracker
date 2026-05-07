@@ -2,7 +2,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 
@@ -57,6 +57,13 @@ export default function PreviousGamesScreen() {
     }, [])
   );
 
+  useEffect(() => {
+    if (!loading) {
+      console.log('Fetched previous games:', dateGames);
+    }
+
+  }, [loading]);
+
   // Handler for clicking a date
   const handleDateClick = (idx: number) => {
     setSelectedDateIdx(idx);
@@ -96,14 +103,20 @@ export default function PreviousGamesScreen() {
             updatedGames.splice(selectedGameIdx, 1);
 
             try {
-              await AsyncStorage.setItem(`bingo_games_${dateObj.date}`, JSON.stringify(updatedGames));
-              const updatedDateGames = [...dateGames];
-              updatedDateGames[selectedDateIdx] = { ...dateObj, games: updatedGames };
-              setDateGames(updatedDateGames);
               if (updatedGames.length === 0) {
+                // Remove the date key from AsyncStorage
+                await AsyncStorage.removeItem(`bingo_games_${dateObj.date}`);
+                // Remove the date from dateGames state
+                const updatedDateGames = dateGames.filter((_, idx) => idx !== selectedDateIdx);
+                setDateGames(updatedDateGames);
                 setSelectedDateIdx(null);
                 setModalVisible(false);
               } else {
+                // Update the games for the date
+                await AsyncStorage.setItem(`bingo_games_${dateObj.date}`, JSON.stringify(updatedGames));
+                const updatedDateGames = [...dateGames];
+                updatedDateGames[selectedDateIdx] = { ...dateObj, games: updatedGames };
+                setDateGames(updatedDateGames);
                 setSelectedGameIdx(Math.min(selectedGameIdx, updatedGames.length - 1));
               }
             } catch (e) {
