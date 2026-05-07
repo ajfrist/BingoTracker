@@ -2,7 +2,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 
@@ -56,13 +56,6 @@ export default function PreviousGamesScreen() {
       fetchGames();
     }, [])
   );
-
-  useEffect(() => {
-    if (!loading) {
-      console.log('Fetched previous games:', dateGames);
-    }
-
-  }, [loading]);
 
   // Handler for clicking a date
   const handleDateClick = (idx: number) => {

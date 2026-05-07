@@ -76,6 +76,7 @@ Run the application natively on an Android device or emulator.
    adb devices
    ```
 
+
 4. Build and Run the application
 
    Run the following command to boot the application on the device and configure the `android` build folder:
@@ -83,6 +84,58 @@ Run the application natively on an Android device or emulator.
    ```bash
    npx expo run:android
    ```
+
+   <details>
+   <summary><strong>Click here to see how to hide the Android taskbar</strong></summary>
+
+   <br/>
+
+   To hide the Android navigation taskbar by default in your app:
+
+   1. **Wait for the initial Gradle build to finish** (i.e., after running `npx expo run:android` for the first time, the `android` folder will be created).
+
+   2. Navigate to the file:
+
+      `android/app/src/main/java/com/frist/bingo_tracker/MainActivity.kt`
+
+   3. **Add the following import at the top if not present:**
+
+      ```kotlin
+      import android.view.View
+      ```
+
+   4. **Modify your `onCreate` function to include the following, and add the extra methods as shown:**
+
+      ```kotlin
+      override fun onCreate(savedInstanceState: Bundle?) {
+          SplashScreenManager.registerOnActivity(this)
+          super.onCreate(null)
+          hideNavigationBar()
+      }
+
+      override fun onWindowFocusChanged(hasFocus: Boolean) {
+          super.onWindowFocusChanged(hasFocus)
+          if (hasFocus) {
+              hideNavigationBar()
+          }
+      }
+
+      private fun hideNavigationBar() {
+          window.decorView.systemUiVisibility =
+              View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+              View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+      }
+      ```
+
+   5. **Rebuild your app:**
+
+      ```bash
+      npx expo run:android
+      ```
+
+   The navigation bar will now be hidden by default when your app is running.
+
+   </details>
 
 5. Build a release APK file to install onto your device 
 
